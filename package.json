@@ -1,0 +1,13 @@
+{
+  "name": "ameisenreich",
+  "version": "1.0.0",
+  "description": "Lern- und Aufbauspiel für die 4. Klasse (Bildungsplan Baden-Württemberg): Baue als Ameisenkönigin deinen Ameisenstaat.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node tools/serve.mjs 8080",
+    "validate": "node tools/validate-questions.mjs",
+    "test": "node tools/validate-questions.mjs && node tools/smoke-test.mjs"
+  },
+  "license": "UNLICENSED"
+}

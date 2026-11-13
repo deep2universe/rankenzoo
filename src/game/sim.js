@@ -1,0 +1,206 @@
+// Simulation des Ameisenstaates: Arbeit, Nahrung, Brut, Zufriedenheit.
+import { GEBAEUDE, SIM, BEDUERFNISSE, rangVon } from './config.js';
+import { computeConnectivity } from './world.js';
+import { emit } from '../events.js';
+import { clamp } from '../util.js';
+
+/** Abgeleitete Werte (werden jeden Tick neu berechnet, nicht gespeichert). */
+export function derive(state) {
+  const v = state.volk;
+  const pop = v.arbeiterinnen + v.drohnen + 1;
+  const fx = {
+    brutTempo: 0, sammelBonus: 0, tempo: 0, quizBonus: 0, ausbildung: 0, wohnBonus: 0, pilzBonus: 0,
+    verbrauch: 0, sterneProMin: 0, zufriedenBonus: 0, joker: 0,
+  };
+  const fertig = state.rooms.filter(r => r.bau >= 1 && r.verbunden !== false);
+  // Spezial-Effekte, die andere Effizienzen beeinflussen, zuerst grob sammeln
+  for (const r of fertig) if (r.typ === 'universitaet') fx.ausbildung += GEBAEUDE.universitaet.effekte.ausbildung;
+
+  // --- Arbeitsverteilung ---
+  let frei = v.arbeiterinnen;
+  const jobs = { bau: 0, ammen: 0, personal: 0, sammler: 0 };
+  const baustellen = state.rooms.filter(r => r.bau < 1 && r.verbunden !== false);
+  const bauProStelle = new Map();
+  for (const r of baustellen) {
+    const n = Math.min(3, Math.max(0, Math.floor(frei * 0.5) - jobs.bau), frei);
+    const k = Math.max(frei > 0 ? 1 : 0, n);
+    bauProStelle.set(r.id, k);
+    jobs.bau += k; frei -= k;
+  }
+  const brutAnz = state.brut.length;
+  const ammenWunsch = Math.ceil(brutAnz / 5);
+  jobs.ammen = Math.min(ammenWunsch, Math.floor(frei * 0.35) + (frei > 0 && ammenWunsch > 0 ? 1 : 0), frei);
+  frei -= jobs.ammen;
+  // Personal: Nahrungsproduzenten zuerst
+  const prio = t => (GEBAEUDE[t].effekte?.nahrung ? 0 : t === 'koenigin' ? 1 : 2);
+  const personal = new Map();
+  const reserve = Math.min(3, frei); // ein paar Sammlerinnen bleiben immer
+  let verfuegbar = frei - reserve;
+  for (const r of [...fertig].sort((a, b) => prio(a.typ) - prio(b.typ))) {
+    const want = GEBAEUDE[r.typ].personal;
+    const k = Math.max(0, Math.min(want, verfuegbar));
+    personal.set(r.id, k);
+    verfuegbar -= k; jobs.personal += k;
+  }
+  frei -= jobs.personal;
+  jobs.sammler = Math.max(0, frei);
+
+  // --- Effizienz & Effekte ---
+  const eff = new Map();
+  const versorgung = {};
+  for (const k of Object.keys(BEDUERFNISSE)) versorgung[k] = SIM.grundVersorgung;
+  versorgung.waerme += state.world.hill * 20;
+  let wohnraum = SIM.grundWohnraum, lager = SIM.grundLager, brutPlatz = SIM.grundBrut, nahrungBau = 0;
+  for (const r of fertig) {
+    const g = GEBAEUDE[r.typ];
+    const e = (g.personal ? (personal.get(r.id) ?? 0) / g.personal : 1) * (1 + fx.ausbildung);
+    eff.set(r.id, e);
+    for (const [k, val] of Object.entries(g.liefert ?? {})) versorgung[k] += val * Math.min(e, 1.2);
+    const ef = g.effekte ?? {};
+    if (ef.wohnraum) wohnraum += ef.wohnraum;
+    if (ef.lager) lager += ef.lager * Math.max(0.5, Math.min(e, 1));
+    if (ef.brutPlatz) brutPlatz += ef.brutPlatz;
+    for (const key of ['brutTempo', 'sammelBonus', 'tempo', 'quizBonus', 'wohnBonus', 'pilzBonus', 'verbrauch', 'sterneProMin', 'zufriedenBonus', 'joker']) {
+      if (ef[key]) fx[key] += ef[key] * Math.min(e, 1.1);
+    }
+  }
+  wohnraum = Math.round(SIM.grundWohnraum + (wohnraum - SIM.grundWohnraum) * (1 + fx.wohnBonus));
+  for (const r of fertig) {
+    const g = GEBAEUDE[r.typ];
+    if (g.effekte?.nahrung) {
+      const bonus = r.typ === 'pilz' ? 1 + fx.pilzBonus : 1;
+      nahrungBau += g.effekte.nahrung * eff.get(r.id) * bonus * (1 + fx.tempo);
+    }
+  }
+  const tagPhase = (state.zeit % SIM.tagDauer) / SIM.tagDauer;
+  const istNacht = tagPhase > 0.72 || tagPhase < 0.06;
+  // abnehmender Ertrag: je mehr Sammlerinnen, desto weiter die Wege
+  const sammelRate = (jobs.sammler / (1 + jobs.sammler / 40)) * SIM.sammeln * (1 + fx.sammelBonus) * (1 + fx.tempo) * (istNacht ? 0.5 : 1);
+  const vb = SIM.verbrauch;
+  const larven = state.brut.filter(b => b.s === 'larve').length;
+  const verbrauch = (v.arbeiterinnen * vb.arbeiterin + v.drohnen * vb.drohne + vb.koenigin + larven * vb.larve) * (1 + fx.verbrauch);
+  const nahrungProSek = sammelRate + nahrungBau;
+
+  // --- Bedürfnisse ---
+  const erwachsene = Math.max(1, pop);
+  const quote = {};
+  const vorrat = state.res.nahrung;
+  quote.nahrung = vorrat <= 0.5 ? 0 : clamp(0.55 + 0.45 * (vorrat / Math.max(25, verbrauch * 90)), 0, 1);
+  if (nahrungProSek < verbrauch && vorrat < verbrauch * 60) quote.nahrung = Math.min(quote.nahrung, 0.6);
+  quote.wohnen = clamp(wohnraum / erwachsene, 0, 1);
+  for (const k of ['freizeit', 'bildung', 'hygiene', 'waerme']) quote[k] = clamp(versorgung[k] / erwachsene, 0, 1);
+  const gew = { nahrung: 0.26, wohnen: 0.2, freizeit: 0.15, bildung: 0.14, hygiene: 0.13, waerme: 0.12 };
+  let z = 0;
+  for (const [k, w] of Object.entries(gew)) z += quote[k] * w;
+  const zufriedenheit = clamp(z * 100 + fx.zufriedenBonus, 0, 100);
+
+  return {
+    pop, jobs, bauProStelle, personal, eff, versorgung, quote, zufriedenheit, wohnraum, lager, brutPlatz,
+    nahrungProSek, verbrauch, fx, tagPhase, istNacht, tag: Math.floor(state.zeit / SIM.tagDauer) + 1,
+    rang: rangVon(pop),
+  };
+}
+
+/** Ein Simulationsschritt (dt in Sekunden Spielzeit). */
+export function tick(state, dt) {
+  const d = derive(state);
+  const v = state.volk;
+  const tagVorher = Math.floor(state.zeit / SIM.tagDauer);
+  state.zeit += dt;
+
+  // Nahrung
+  state.res.nahrung = clamp(state.res.nahrung + (d.nahrungProSek - d.verbrauch) * dt, 0, d.lager);
+
+  // Bau
+  for (const r of state.rooms) {
+    if (r.bau >= 1 || r.verbunden === false) continue;
+    const k = d.bauProStelle.get(r.id) ?? 0;
+    r.bau = Math.min(1, r.bau + (dt * k * (1 + d.fx.tempo)) / GEBAEUDE[r.typ].bauzeit);
+    if (r.bau >= 1) {
+      state.stats.gebaut++;
+      emit('gebaut', r);
+    }
+  }
+
+  // Eiablage
+  const hatFutter = state.res.nahrung > 3;
+  const erwachsen = v.arbeiterinnen + v.drohnen;
+  const platz = state.brut.length < d.brutPlatz && erwachsen + state.brut.length < d.wohnraum + 4;
+  const freude = 0.45 + d.zufriedenheit / 100;
+  v.eiTimer += dt * freude * (1 + 0.15 * (state.kronenStufe - 1));
+  if (v.eiTimer >= SIM.eiIntervall) {
+    v.eiTimer = 0;
+    if (hatFutter && platz) {
+      state.brut.push({ s: 'ei', t: 0, k: Math.random() < v.drohnenAnteil ? 'd' : 'a' });
+      emit('ei');
+    } else if (!platz) {
+      emit('hinweis', { id: 'platz', text: state.brut.length >= d.brutPlatz ? 'Die Kinderstuben sind voll! Baue mehr Kinderstuben.' : 'Kein Wohnraum mehr! Baue Schlafkammern.' });
+    }
+  }
+
+  // Brutentwicklung
+  const ammenFaktor = state.brut.length ? clamp(0.45 + 0.55 * (d.jobs.ammen / Math.ceil(state.brut.length / 5)), 0.45, 1) : 1;
+  const tempo = (1 + d.fx.brutTempo + state.world.hill * 0.04) * ammenFaktor * (hatFutter ? 1 : 0.15);
+  const fertigeBrut = [];
+  for (const b of state.brut) {
+    b.t += dt * tempo;
+    const dauer = SIM.brutDauer[b.s];
+    if (b.t >= dauer) {
+      b.t = 0;
+      if (b.s === 'ei') b.s = 'larve';
+      else if (b.s === 'larve') b.s = 'puppe';
+      else fertigeBrut.push(b);
+    }
+  }
+  if (fertigeBrut.length) {
+    state.brut = state.brut.filter(b => !fertigeBrut.includes(b));
+    for (const b of fertigeBrut) {
+      if (b.k === 'd') v.drohnen++; else v.arbeiterinnen++;
+      emit('geschluepft', b.k);
+    }
+  }
+
+  // Auswandern bei Hunger / großer Unzufriedenheit (kindgerecht: niemand stirbt)
+  if (state.res.nahrung <= 0.5 || d.zufriedenheit < 22) {
+    v.auswanderTimer += dt;
+    const grenze = state.res.nahrung <= 0.5 ? 10 : 25;
+    if (v.auswanderTimer > grenze && v.arbeiterinnen + v.drohnen > 4) {
+      v.auswanderTimer = 0;
+      if (v.drohnen > 0 && Math.random() < 0.5) v.drohnen--; else v.arbeiterinnen--;
+      emit('ausgewandert', state.res.nahrung <= 0.5 ? 'hunger' : 'unzufrieden');
+    }
+  } else v.auswanderTimer = Math.max(0, v.auswanderTimer - dt);
+
+  // Handel (Einkaufscenter)
+  if (d.fx.sterneProMin > 0) {
+    state._sterneRest = (state._sterneRest ?? 0) + (d.fx.sterneProMin / 60) * dt;
+    if (state._sterneRest >= 1) {
+      const n = Math.floor(state._sterneRest);
+      state._sterneRest -= n;
+      state.res.sterne += n;
+    }
+  }
+
+  // Neuer Tag
+  const tagJetzt = Math.floor(state.zeit / SIM.tagDauer);
+  if (tagJetzt > tagVorher) {
+    const neu = Math.min(9 - state.res.joker, Math.round(d.fx.joker));
+    if (neu > 0) state.res.joker += neu;
+    emit('neuerTag', { tag: tagJetzt + 1, joker: Math.max(0, neu) });
+  }
+  return d;
+}
+
+export function refreshConnectivity(state) {
+  computeConnectivity(state.world, state.rooms);
+}
+
+export function hochzeitsflugBereit(state, d) {
+  const platz = state.rooms.find(r => r.typ === 'hochzeit' && r.bau >= 1 && r.verbunden !== false);
+  const gruende = [];
+  if (!platz) gruende.push('Baue einen Hochzeitsflug-Startplatz am Hügelrand');
+  if (state.volk.drohnen < 10) gruende.push(`Mindestens 10 Drohnen (du hast ${state.volk.drohnen})`);
+  if (state.volk.arbeiterinnen < 40) gruende.push(`Mindestens 40 Arbeiterinnen (du hast ${state.volk.arbeiterinnen})`);
+  if (d.zufriedenheit < 60) gruende.push(`Zufriedenheit mind. 60 % (jetzt ${Math.round(d.zufriedenheit)} %)`);
+  return { ok: gruende.length === 0, gruende };
+}
