@@ -125,3 +125,40 @@ Für jedes Spiel gibt es einen Rekord. Die Belohnung richtet sich nach der Leist
   - Maus: Rad zum Zoomen
   - Tastatur: Q (Quiz), M (Minispiele), G (Gang), X (Abriss), WASD (Ansicht verschieben), Ziffern 1–4 (Antworten)
 - **Barrierefreiheit:** Vorlesen, große Touch-Ziele, `prefers-reduced-motion`, Informationen werden nie nur über Farbe vermittelt.
+
+## Strategie-Erweiterung (Version 2)
+
+### Zwei Modi, ein Spiel (Shift ⇧)
+Das Nest und das Revier zeigen **denselben Spielstand** – nur mit anderen Werkzeugen:
+
+| | 🏠 Nest | 🗺️ Revier |
+|---|---|---|
+| Blick | Seitenansicht, Querschnitt durch den Boden | Draufsicht auf die Wiese rund um den Hügel |
+| Spieler ist | Baumeisterin | Feldherrin / Planerin |
+| Interaktion | graben, bauen, abreißen, Volk versorgen | Befehle geben: Trupps, Wächterinnen, Expeditionen, Handel |
+| Rohstoff-Schwerpunkt | Sterne, Gangstücke, Baupläne | Nahrung, Baumaterial, Entdeckungen |
+
+Die Verbindungen sind sichtbar: Ameisen, die im Revier sammeln, verlassen im Nest den Hügel; Oberflächengebäude stehen in der Draufsicht rund um den Hügel; der Hügel wächst in beiden Ansichten mit. Der Wechsel ist eine 0,85-s-Iris-Überblendung vom Hügel aus, die HUD-Farben wechseln von Honig-Braun zu Wald-Grün.
+
+### Revier
+- 44 × 30 Felder, am Anfang ist nur ein kleiner Kreis um den Hügel sichtbar, der Rest liegt im **Nebel**.
+- **Futterquellen:** Beerenstrauch, Sonnenblumen, Blattlaus-Kolonie, Picknick-Krümel (verbraucht sich), Zweig-Haufen und Harz-Baum (Baumaterial), Tautropfen-Wiese (Sauberkeit), Glitzer-Kiesel (Sterne). Ertrag sinkt mit der Entfernung und wächst mit abnehmendem Zuwachs pro Ameise. Quellen leeren sich und wachsen nach.
+- **Befehle:** freie Arbeiterinnen als Sammlerinnen oder Wächterinnen einer Quelle zuteilen (+/−, +5). Reichen die Ameisen nicht, arbeiten alle Trupps anteilig langsamer.
+- **Expeditionen:** 1–5 Erkunderinnen laufen zu einem Ziel, lüften den Nebel, entdecken Quellen und bringen Fundstücke mit. Fünf **Schätze** (Sterne, Baumaterial, oft ein Bauplan) und ein **Nachbarvolk** liegen weit draußen.
+- **Störenfriede** (Marienkäfer, Spinne, Wespe, Spatz, Ameisenlöwe) senken den Ertrag einer Quelle, bis Wächterinnen sie **freundlich verscheuchen**. Niemand wird verletzt.
+- **Wetter:** Regenschauer bremsen das Sammeln, lassen Quellen aber schneller nachwachsen.
+- **Handel** mit dem Nachbarvolk (nach „Diplomatie" oder mit Handelsposten): drei wechselnde Tauschangebote.
+
+### Forschung
+20 Techniken in 5 Ästen × 4 Stufen. Kosten: Forschungspunkte 🔬 (+ ab Stufe 2 Baumaterial 🪵), Dauer 30–110 s, immer nur ein Projekt. Forschungspunkte kommen aus **richtigen Quizantworten** (+2), Denksport (+1) und Bildungsgebäuden – Lernen treibt also direkt den technischen Fortschritt. Einige Techniken schalten Funktionen frei (Quellen im Nebel ahnen, Handel, Baupläne kopieren).
+
+### Neue Gebäude (16)
+Sporthalle, Eisladen, Sechs-Bein-Schuhladen, Fühler-Salon, Ameisenschule, Wachstube, Späherturm, Spielplatz, Forschungslabor, Theater, Musikschule, Krümelkasse, Tautropfen-Bad, Handelsposten, Ameisen-Rathaus, Duftspur-Bahnhof. Jedes hat Einrichtung, Animation, Beruf mit Accessoire und einen echten Ameisen-Fakt.
+
+### Performance
+Die alte Version zeichnete ungebremst jedes Bild komplett neu (Gelände 3840 × 3200 px, ~400 Farbverläufe für Ameisen, Weichzeichner auf allen HUD-Elementen). Jetzt:
+- Ameisen, Emojis und Lichtschein kommen aus Sprite-Caches.
+- Bäume, Gelände und Gras liegen in einem bildschirmgroßen Zwischenspeicher, der nur bei Kamera- oder Weltänderung neu entsteht.
+- Adaptive Bildrate: 60 fps bei Interaktion, 30 im Ruhezustand, 5 hinter Fenstern; automatische Auflösungsreduktion, wenn Zeichnen dauerhaft zu lange dauert.
+- Kein `backdrop-filter`, keine `box-shadow`-Endlosanimationen; Vignette als statisches CSS-Overlay.
+- Messung (Headless-Chromium, 1440 × 900, Retina): JavaScript-Zeit 610 → 27 ms pro Sekunde.

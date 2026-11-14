@@ -32,7 +32,7 @@ export class HUD {
       this.res[key] = el;
       return el;
     };
-    this.kolonie = h('div.kolonie-card', { onclick: () => this.togglePanel(), title: 'Volk anzeigen' },
+    this.kolonie = h('div.kolonie-card', { onclick: () => this.togglePanel(), title: 'Volk / Revier-Kommando ein- und ausblenden' },
       h('div.krone', '👑'), h('div', h('div.name', ''), h('div.rang', '')));
     const top = h('div.topbar',
       this.kolonie,
@@ -83,6 +83,7 @@ export class HUD {
     this.panel.after(this.revier.panel);
     this.panelOffen = window.innerWidth > 900;
     this.panel.classList.toggle('zu', !this.panelOffen);
+    this.revier.panel.classList.toggle('zu', !this.panelOffen);
   }
 
   befehl(k, v) {
@@ -102,6 +103,8 @@ export class HUD {
   togglePanel() {
     this.panelOffen = !this.panelOffen;
     this.panel.classList.toggle('zu', !this.panelOffen);
+    this.revier.panel.classList.toggle('zu', !this.panelOffen);
+    this.revier.sig = '';
     this.panelSig = '';
   }
 

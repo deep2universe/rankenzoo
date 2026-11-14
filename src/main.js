@@ -56,7 +56,10 @@ const game = {
       revierR.maxDpr = renderer.maxDpr;
       if (!revierR.state || revierR.state !== this.state) revierR.setState(this.state);
       revierR.focusNest();
-      if (!this.state.revier.besucht) { this.state.revier.besucht = true; }
+      if (!this.state.revier.besucht) {
+        this.state.revier.besucht = true;
+        setTimeout(() => toast('Willkommen im Revier! Tippe auf eine Futterquelle und schicke Sammlerinnen hin. Mit 🔭 Erkunden lüftest du den Nebel. Shift ⇧ bringt dich zurück ins Nest.', { icon: '🗺️', art: 'gold', dauer: 8000 }), 900);
+      }
       this.state.stats.revierBesuche++;
     } else renderer.focusHome();
     this.uebergang = { t: 0, dauer: 0.85, snap, ax, ay, ziel };
@@ -324,7 +327,7 @@ function begin(state, neu) {
   startMusic();
   game.hud.update(game.d);
   if (neu) {
-    setTimeout(() => toast(`Willkommen, Königin ${state.spieler.name}! Dein Volk „${state.spieler.koloniename}" wartet auf dich.`, { icon: '👑', art: 'gold', dauer: 5000 }), 400);
+    setTimeout(() => toast(`Willkommen, ${state.spieler.name === 'Königin' ? 'Königin' : 'Königin ' + state.spieler.name}! Dein Volk „${state.spieler.koloniename}" wartet auf dich.`, { icon: '👑', art: 'gold', dauer: 5000 }), 400);
   }
   game.save();
   clearInterval(game._auto);
@@ -340,9 +343,9 @@ function setupInputOnce() { if (!inputCtl) inputCtl = setupInput(game); }
 // Die Simulation läuft unabhängig von der Bildrate. Gezeichnet wird nur so oft wie nötig:
 // flüssig, während jemand scrollt oder zieht – gemächlicher, wenn das Bild ruht oder ein Fenster offen ist.
 const GRAFIK = {
-  hoch: { dpr: 2, aktiv: 60, ruhe: 60, fenster: 30 },
-  ausgewogen: { dpr: 1.5, aktiv: 60, ruhe: 30, fenster: 12 },
-  sparsam: { dpr: 1, aktiv: 30, ruhe: 20, fenster: 8 },
+  hoch: { dpr: 2, aktiv: 60, ruhe: 60, fenster: 20 },
+  ausgewogen: { dpr: 1.5, aktiv: 60, ruhe: 30, fenster: 5 },
+  sparsam: { dpr: 1, aktiv: 30, ruhe: 20, fenster: 3 },
 };
 function wendeGrafikAn(stufe) {
   const g = GRAFIK[stufe] ?? GRAFIK.ausgewogen;

@@ -50,7 +50,7 @@ export function startScreen(onNeu, onWeiter) {
       ),
     ),
     h('div.fusszeile', '📚 Lernstoff Klasse 4 nach dem Bildungsplan Baden-Württemberg · Deutsch, Mathe, Sachunterricht, Englisch, Musik & Kunst, Sport & Miteinander',
-      h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
+      h('br'), '⇧ Shift wechselt zwischen Nest (graben & bauen) und Revier (Ameisen Befehle geben).', h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
   ));
   anim();
 }

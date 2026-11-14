@@ -19,6 +19,8 @@ function maskottchen() {
   const st = { mood: 'idle', t: 0, moodT: 0, raf: 0 };
   let last = performance.now();
   const loop = now => {
+    // 30 Bilder pro Sekunde reichen für das Maskottchen
+    if (now - last < 32) { if (cv.isConnected) st.raf = requestAnimationFrame(loop); return; }
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     st.t += dt; st.moodT += dt;
     ctx.setTransform(2, 0, 0, 2, 0, 0);

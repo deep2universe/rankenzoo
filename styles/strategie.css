@@ -59,6 +59,7 @@ body.modus-revier .modus-schalter .ms-kugel { transform: translateX(100%); backg
 .seg.mini button.an { background: linear-gradient(180deg, #ffd75e, #ffab2e); color: #3b2300; box-shadow: none; }
 
 /* ---------- Revier-Kommando-Panel ---------- */
+.revier-panel.zu { display: none; }
 .revier-panel {
   flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin;
   border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); padding: 12px 14px;
