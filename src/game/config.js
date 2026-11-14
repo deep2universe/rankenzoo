@@ -9,6 +9,7 @@ export const HILL_X = 30;          // Mittelpunkt des Ameisenhügels
 export const WATER_ROWS = 2;       // Grundwasser ganz unten
 
 export const SAVE_KEY = 'ameisenreich.save.v1';
+export const STATE_VERSION = 2;
 
 // Zelltypen
 export const C = {
@@ -21,7 +22,7 @@ export function hillShape(level) {
 }
 export const HILL_MAX = 6;
 export function hillUpgradeCost(level) {
-  return { sterne: 50 + level * 45, gang: 6 + level * 4, pop: [0, 0, 18, 40, 75, 120, 180][level] ?? 999 };
+  return { sterne: 50 + level * 45, gang: 6 + level * 4, material: level <= 1 ? 0 : (level - 1) * 20, pop: [0, 0, 18, 40, 75, 120, 180][level] ?? 999 };
 }
 
 // Kolonie-Ränge nach Bevölkerung
@@ -54,7 +55,8 @@ export const BEDUERFNISSE = {
   zone     'erde' | 'huegel' | 'oberflaeche' | 'tief'
   minTiefe Mindestanzahl Erd-Zeilen unter der Oberfläche (nur Erde)
   stufe    Freischalt-Stufe (Kolonie-Rang)
-  kosten   Sterne
+  kosten   Sterne (optional material = Baumaterial 🪵)
+  forschung  nötige Forschung, bevor der Bauplan im Quiz auftauchen kann
   bauzeit  Sekunden bei 1 Bauarbeiterin
   personal Arbeitsplätze für ausgebildete Ameisen
   beruf    Berufsname der ausgebildeten Ameisen + Accessoire
@@ -117,8 +119,8 @@ export const GEBAEUDE = {
   buchhandlung: {
     name: 'Buchhandlung', icon: '📚', w: 3, h: 2, zone: 'erde', minTiefe: 1, stufe: 1, kosten: 30, bauzeit: 16,
     personal: 2, beruf: { name: 'Buchhändlerin', acc: 'brille' }, liefert: { bildung: 35 },
-    effekte: { joker: 1 }, farbe: '#c9b8ff',
-    text: 'Ameisen lesen gern! Bringt jeden Ameisentag einen Quiz-Joker.',
+    effekte: { joker: 1, fp: 0.5 }, farbe: '#c9b8ff',
+    text: 'Ameisen lesen gern! Bringt jeden Ameisentag einen Quiz-Joker und ein paar 🔬 Forschungspunkte.',
     fakt: 'Ameisen „lesen" Duftspuren: Mit Pheromonen schreiben sie sich Wegbeschreibungen auf den Boden.',
   },
   blattlaus: {
@@ -184,8 +186,8 @@ export const GEBAEUDE = {
   universitaet: {
     name: 'Universität', icon: '🎓', w: 5, h: 3, zone: 'erde', minTiefe: 2, stufe: 2, kosten: 80, bauzeit: 28,
     personal: 4, beruf: { name: 'Professorin', acc: 'doktorhut' }, liefert: { bildung: 90 },
-    effekte: { quizBonus: 0.2, ausbildung: 0.1 }, farbe: '#d4c2ff',
-    text: '+20 % Sterne im Quiz und alle Berufe arbeiten 10 % besser.',
+    effekte: { quizBonus: 0.2, ausbildung: 0.1, fp: 2 }, farbe: '#d4c2ff',
+    text: '+20 % Sterne im Quiz, alle Berufe arbeiten 10 % besser, dazu 🔬 Forschungspunkte.',
     fakt: 'Ameisen lernen voneinander: Erfahrene Sammlerinnen führen Neulinge im „Tandemlauf" zum Futter.',
   },
   einkauf: {
@@ -202,16 +204,162 @@ export const GEBAEUDE = {
     text: 'Von hier starten Drohnen und junge Königinnen zum Hochzeitsflug. Muss am Hügelrand liegen.',
     fakt: 'Beim Hochzeitsflug schwärmen geflügelte Ameisen aus vielen Nestern gleichzeitig aus – oft an warmen, windstillen Tagen.',
   },
+  // ---------- Neu: öffentliches & privates Leben im Ameisenstaat ----------
+  sporthalle: {
+    name: 'Sporthalle', icon: '🏟️', w: 4, h: 2, zone: 'erde', minTiefe: 2, stufe: 1, kosten: 40, bauzeit: 18,
+    personal: 2, beruf: { name: 'Trainerin', acc: 'stirnband' }, liefert: { freizeit: 35, hygiene: 10 },
+    effekte: { tempo: 0.08 }, farbe: '#9fe0ff',
+    text: 'Turnen, Klettern, Gewichtheben: Alle Ameisen arbeiten 8 % schneller.',
+    fakt: 'Sahara-Silberameisen gehören zu den schnellsten Ameisen: Sie legen fast einen Meter pro Sekunde zurück – rund 100 Körperlängen!',
+  },
+  eisladen: {
+    name: 'Eisladen', icon: '🍦', w: 3, h: 2, zone: 'erde', minTiefe: 1, stufe: 1, kosten: 30, bauzeit: 14,
+    personal: 2, beruf: { name: 'Eisverkäuferin', acc: 'muetze' }, liefert: { freizeit: 30 },
+    effekte: { zufriedenBonus: 3 }, farbe: '#ffd6f0',
+    text: 'Honigtau-Eis in vielen Sorten! Macht glücklich (+3 % Zufriedenheit).',
+    fakt: 'Ameisen mögen nicht immer nur Süßes: Brauchen die Larven Eiweiß zum Wachsen, sammeln die Arbeiterinnen lieber Insekten und Samen.',
+  },
+  schuhladen: {
+    name: 'Sechs-Bein-Schuhladen', icon: '👟', w: 3, h: 2, zone: 'erde', minTiefe: 1, stufe: 1, kosten: 35, bauzeit: 15,
+    personal: 2, beruf: { name: 'Schuhmacherin', acc: 'brille' }, liefert: { freizeit: 10 },
+    effekte: { sammelBonus: 0.15, expTempo: 0.2 }, farbe: '#ffe0a8',
+    text: 'Sechs Schuhe pro Ameise! Sammlerinnen +15 %, Erkunderinnen laufen 20 % schneller.',
+    fakt: 'An ihren Füßen haben Ameisen winzige Krallen und Haftpolster – damit laufen sie sogar kopfüber an der Decke entlang.',
+  },
+  friseur: {
+    name: 'Fühler-Salon', icon: '💇', w: 3, h: 2, zone: 'erde', minTiefe: 1, stufe: 1, kosten: 25, bauzeit: 12,
+    personal: 1, beruf: { name: 'Friseurin', acc: 'schleife' }, liefert: { hygiene: 30, freizeit: 10 }, farbe: '#ffc2d6',
+    text: 'Fühler waschen, kämmen, föhnen: Sauberkeit und Wohlfühlen.',
+    fakt: 'Ameisen putzen ihre Fühler ständig – mit einem eingebauten „Kamm" an den Vorderbeinen. Saubere Fühler riechen besser!',
+  },
+  schule: {
+    name: 'Ameisenschule', icon: '🏫', w: 4, h: 2, zone: 'erde', minTiefe: 2, stufe: 1, kosten: 40, bauzeit: 18,
+    personal: 3, beruf: { name: 'Lehrerin', acc: 'brille' }, liefert: { bildung: 50 },
+    effekte: { fp: 1 }, farbe: '#c8f0b8',
+    text: 'Junge Ameisen lernen Lesen, Rechnen, Duftkunde. Bringt Bildung und 🔬 Forschungspunkte.',
+    fakt: 'Junge Arbeiterinnen arbeiten zuerst im Nest und gehen erst später als Sammlerinnen nach draußen – eine Art Ausbildung!',
+  },
+  wache: {
+    name: 'Wachstube', icon: '🛡️', w: 3, h: 2, zone: 'erde', minTiefe: 2, stufe: 1, kosten: 35, bauzeit: 15,
+    personal: 2, beruf: { name: 'Wächterin', acc: 'helm' }, liefert: {},
+    effekte: { wacheStaerke: 0.5, zufriedenBonus: 1 }, farbe: '#c9d3e6',
+    text: 'Bildet Wächterinnen aus: Störenfriede im Revier werden 50 % schneller vertrieben.',
+    fakt: 'Bei manchen Ameisenarten haben Soldatinnen so große, flache Köpfe, dass sie damit den Nesteingang wie eine Tür verschließen.',
+  },
+  spaeher: {
+    name: 'Späherturm', icon: '🔭', w: 2, h: 2, zone: 'huegel', stufe: 1, kosten: 30, bauzeit: 14,
+    personal: 1, beruf: { name: 'Späherin', acc: 'stirnband' }, liefert: {},
+    effekte: { sicht: 1, expSlots: 1 }, farbe: '#d6ecff',
+    text: 'Weitblick! Erkunderinnen sehen weiter und du kannst eine Expedition mehr losschicken.',
+    fakt: 'Wüstenameisen finden mit einem „Sonnenkompass" und durch Schrittezählen auf direktem Weg nach Hause zurück.',
+  },
+  spielplatz: {
+    name: 'Spielplatz', icon: '🎠', w: 4, h: 2, zone: 'oberflaeche', stufe: 1, kosten: 30, bauzeit: 14,
+    personal: 1, beruf: { name: 'Aufpasserin', acc: 'schleife' }, liefert: { freizeit: 30 },
+    effekte: { brutTempo: 0.05 }, farbe: '#ffe9a0',
+    text: 'Schaukel, Rutsche, Wippe – für junge Ameisen. Etwas schnellere Brut.',
+    fakt: 'Neue Sammlerinnen machen zuerst kurze „Lernspaziergänge" rund ums Nest und prägen sich dabei die Umgebung ein.',
+  },
+  labor: {
+    name: 'Forschungslabor', icon: '🔬', w: 4, h: 3, zone: 'erde', minTiefe: 8, stufe: 2, kosten: 60, material: 30, bauzeit: 26,
+    personal: 3, beruf: { name: 'Forscherin', acc: 'brille' }, liefert: { bildung: 20 },
+    effekte: { fp: 3, forschTempo: 0.3 }, farbe: '#bfe7ff',
+    text: 'Tief unten wird getüftelt: viele 🔬 Forschungspunkte und 30 % schnellere Forschung.',
+    fakt: 'Blattschneiderameisen tragen nützliche Bakterien auf ihrem Körper, die ihren Pilzgarten vor Schimmel schützen – wie ein eingebautes Medikament.',
+  },
+  theater: {
+    name: 'Theater', icon: '🎭', w: 4, h: 3, zone: 'erde', minTiefe: 2, stufe: 2, kosten: 50, bauzeit: 22,
+    personal: 2, beruf: { name: 'Schauspielerin', acc: 'schleife' }, liefert: { freizeit: 45, bildung: 15 }, farbe: '#ffb8b8',
+    text: 'Vorhang auf! Theater bringt Spaß und Bildung zugleich.',
+    fakt: 'Ameisen verständigen sich auch mit Geräuschen: Manche Arten zirpen, indem sie Teile ihres Hinterleibs aneinander reiben.',
+  },
+  musikschule: {
+    name: 'Musikschule', icon: '🎻', w: 3, h: 2, zone: 'erde', minTiefe: 2, stufe: 2, kosten: 40, bauzeit: 16,
+    personal: 2, beruf: { name: 'Musiklehrerin', acc: 'doktorhut' }, liefert: { bildung: 25, freizeit: 25 }, farbe: '#e2c8ff',
+    text: 'Fühler-Geige und Krümel-Trommel: Musik für Bildung und Freizeit.',
+    fakt: 'Sogar die Puppen mancher Ameisen können zirpen – so machen sie die Arbeiterinnen auf sich aufmerksam.',
+  },
+  bank: {
+    name: 'Krümelkasse', icon: '🏦', w: 3, h: 2, zone: 'erde', minTiefe: 3, stufe: 2, kosten: 50, bauzeit: 20,
+    personal: 2, beruf: { name: 'Kassiererin', acc: 'brille' }, liefert: {},
+    effekte: { sterneProMin: 2, lagerBonus: 0.15 }, farbe: '#d8f5c0',
+    text: 'Sparen lohnt sich: 2 ⭐ pro Minute und 15 % mehr Lagerplatz.',
+    fakt: 'Ameisen teilen Futter ständig von Mund zu Mund. So weiß das ganze Volk schnell, was es gerade gibt – wie ein Konto, auf das alle schauen.',
+  },
+  schwimmbad: {
+    name: 'Tautropfen-Bad', icon: '🏊', w: 5, h: 2, zone: 'erde', minTiefe: 12, stufe: 2, kosten: 55, bauzeit: 22,
+    personal: 2, beruf: { name: 'Bademeisterin', acc: 'sonnenbrille' }, liefert: { freizeit: 40, hygiene: 30 }, farbe: '#a8e4ff',
+    text: 'Planschen im kühlen Tau. Braucht Tiefe (mind. 12), dort ist es feucht.',
+    fakt: 'Für eine Ameise ist ein einzelner Tautropfen so groß wie für dich ein Wasserball – sie trinkt vorsichtig vom Rand.',
+  },
+  handel: {
+    name: 'Handelsposten', icon: '🏪', w: 4, h: 2, zone: 'oberflaeche', stufe: 2, kosten: 45, bauzeit: 18,
+    personal: 2, beruf: { name: 'Händlerin', acc: 'kiste' }, liefert: { freizeit: 5 },
+    effekte: { handel: 1 }, farbe: '#ffd59e',
+    text: 'Tausche Waren mit Nachbarvölkern (im Revier). Bessere Angebote!',
+    fakt: 'Manche Ameisenarten leben als friedliche Gäste in den Nestern anderer Arten und bekommen dort sogar Futter.',
+  },
+  rathaus: {
+    name: 'Ameisen-Rathaus', icon: '🏛️', w: 5, h: 3, zone: 'erde', minTiefe: 2, stufe: 2, kosten: 70, material: 40, bauzeit: 28,
+    personal: 2, beruf: { name: 'Bürgermeisterin', acc: 'zylinder' }, liefert: { bildung: 10 }, einzigartig: true,
+    effekte: { zufriedenBonus: 4, revierBonus: 0.15, expSlots: 1 }, farbe: '#f3e1b0',
+    text: 'Gute Planung: +4 % Zufriedenheit, Revier-Trupps +15 % und eine Expedition mehr.',
+    fakt: 'Ameisen haben keinen Chef – nicht einmal die Königin gibt Befehle! Jede Ameise reagiert auf Düfte und auf die Ameisen, denen sie begegnet.',
+  },
+  bahnhof: {
+    name: 'Duftspur-Bahnhof', icon: '🚂', w: 4, h: 2, zone: 'oberflaeche', stufe: 2, kosten: 55, material: 30, bauzeit: 22, forschung: 'duftspuren',
+    personal: 2, beruf: { name: 'Schaffnerin', acc: 'muetze' }, liefert: { freizeit: 10 },
+    effekte: { revierBonus: 0.25 }, farbe: '#ffcf9e',
+    text: 'Express-Duftstraßen ins Revier: Alle Sammel-Trupps +25 %. (Braucht Forschung „Duftspuren")',
+    fakt: 'Auf Ameisenstraßen gibt es kaum Stau: Wird es eng, laufen Ameisen langsamer, weichen aus oder wählen einen anderen Weg.',
+  },
+};
+
+// Accessoires und Farben für die Statistik
+export const ROHSTOFFE = {
+  sterne: { name: 'Sterne', icon: '⭐' },
+  gang: { name: 'Gangstücke', icon: '🧱' },
+  nahrung: { name: 'Nahrung', icon: '🍯' },
+  material: { name: 'Baumaterial', icon: '🪵' },
+  fp: { name: 'Forschungspunkte', icon: '🔬' },
+};
+
+/*
+ Futterquellen im Revier (Draufsicht). Felder:
+  gibt     Rohstoff, den Sammlerinnen holen
+  rate     Ertrag je Sammlerin und Sekunde (vor Entfernung & Boni)
+  menge    Startvorrat; regen = Nachwachsen pro Sekunde (0 = verbraucht sich)
+  stoerer  Welche Störenfriede hier auftauchen können
+*/
+export const QUELLEN = {
+  beeren: { name: 'Beerenstrauch', icon: '🍓', gibt: 'nahrung', rate: 0.07, menge: 500, regen: 0.6, stoerer: ['wespe'], text: 'Süße Beeren – wachsen langsam nach.' },
+  samen: { name: 'Sonnenblumen', icon: '🌻', gibt: 'nahrung', rate: 0.055, menge: 700, regen: 0.4, stoerer: ['vogel'], text: 'Ölreiche Samen – nahrhaft und lange haltbar.' },
+  blattlaus: { name: 'Blattlaus-Kolonie', icon: '🌿', gibt: 'nahrung', rate: 0.08, menge: 400, regen: 1.2, stoerer: ['marienkaefer'], text: 'Blattläuse geben süßen Honigtau. Marienkäfer lieben sie auch!' },
+  zucker: { name: 'Picknick-Krümel', icon: '🍰', gibt: 'nahrung', rate: 0.16, menge: 600, regen: 0, stoerer: ['wespe'], text: 'Ein Festmahl! Aber wenn es aufgegessen ist, ist es weg.' },
+  zweige: { name: 'Zweig-Haufen', icon: '🪵', gibt: 'material', rate: 0.035, menge: 400, regen: 0.25, stoerer: ['spinne'], text: 'Nadeln und Zweige – Baumaterial für Hügel, Forschung und große Gebäude.' },
+  harz: { name: 'Harz-Baum', icon: '🌲', gibt: 'material', rate: 0.05, menge: 500, regen: 0.3, stoerer: ['spinne'], text: 'Klebriges Harz: wertvolles Baumaterial, das sogar Keime abhält.' },
+  tau: { name: 'Tautropfen-Wiese', icon: '💧', gibt: 'tau', rate: 1, menge: 9999, regen: 9, stoerer: [], text: 'Frisches Wasser macht das Volk sauber: jede Sammlerin hier versorgt 3 Ameisen mit Sauberkeit.' },
+  kristall: { name: 'Glitzer-Kiesel', icon: '💎', gibt: 'sterne', rate: 0.012, menge: 300, regen: 0.05, stoerer: ['ameisenloewe'], text: 'Funkelnde Steinchen – bringen Sterne.' },
+  nachbar: { name: 'Nachbarvolk „Rotkäppchen"', icon: '🏰', gibt: null, rate: 0, menge: 0, regen: 0, stoerer: [], text: 'Ein freundliches Nachbarvolk. Mit Forschung „Diplomatie" oder einem Handelsposten könnt ihr tauschen.' },
+  schatz: { name: 'Geheimnisvoller Fund', icon: '🎁', gibt: null, rate: 0, menge: 1, regen: 0, stoerer: [], text: 'Hier liegt etwas! Schicke eine Expedition hin.' },
+};
+
+export const STOERER = {
+  marienkaefer: { name: 'Marienkäfer', icon: '🐞', staerke: 3, text: 'nascht an den Blattläusen' },
+  spinne: { name: 'Spinne', icon: '🕷️', staerke: 4, text: 'hat ein Netz über den Weg gespannt' },
+  wespe: { name: 'Wespe', icon: '🐝', staerke: 4, text: 'brummt um das Futter herum' },
+  vogel: { name: 'Spatz', icon: '🐦', staerke: 5, text: 'pickt nach den Samen' },
+  ameisenloewe: { name: 'Ameisenlöwe', icon: '🦗', staerke: 4, text: 'lauert in einem Sandtrichter' },
 };
 
 // Welche Fächer bevorzugt welche Baupläne liefern
 export const FACH_BAUPLAENE = {
-  deutsch: ['buchhandlung', 'kita', 'wohnen', 'universitaet'],
-  mathe: ['vorrat', 'einkauf', 'tankstelle', 'brut'],
-  sachunterricht: ['pilz', 'blattlaus', 'apotheke', 'brunnen', 'sonne', 'muell'],
-  englisch: ['restaurant', 'kino', 'baeckerei', 'wohnen'],
-  musik_kunst: ['kino', 'moebel', 'baeckerei', 'kita'],
-  sport_werte: ['fussball', 'hochzeit', 'apotheke', 'muell'],
+  deutsch: ['buchhandlung', 'kita', 'wohnen', 'universitaet', 'schule', 'theater', 'rathaus'],
+  mathe: ['vorrat', 'einkauf', 'tankstelle', 'brut', 'bank', 'handel', 'labor'],
+  sachunterricht: ['pilz', 'blattlaus', 'apotheke', 'brunnen', 'sonne', 'muell', 'labor', 'spaeher', 'schwimmbad'],
+  englisch: ['restaurant', 'kino', 'baeckerei', 'wohnen', 'eisladen', 'schuhladen', 'bahnhof'],
+  musik_kunst: ['kino', 'moebel', 'baeckerei', 'kita', 'musikschule', 'theater', 'friseur'],
+  sport_werte: ['fussball', 'hochzeit', 'apotheke', 'muell', 'sporthalle', 'spielplatz', 'wache'],
 };
 
 export const FAECHER = {
@@ -234,7 +382,12 @@ export const SIM = {
   grundBrut: 6,
   grundVersorgung: 12,   // jede Kolonie hat ein bisschen von allem
   tagDauer: 240,         // Sekunden pro Ameisentag
+  fpGrund: 0.5,         // Forschungspunkte pro Minute ohne Gebäude (die Königin denkt nach)
+  fpProRichtig: 2,       // Forschungspunkte je richtiger Quizantwort
 };
+
+// Revier-Karte (Draufsicht)
+export const REVIER = { W: 44, H: 30, TILE: 48, startSicht: 4.5, expTempo: 0.9, expSicht: 2.2 };
 
 export const QUIZ = {
   fragenProRunde: 6,

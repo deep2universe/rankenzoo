@@ -2,6 +2,7 @@
 import { TILE as T, COLS, ROWS, GROUND, HILL_X, C, GEBAEUDE, SIM } from '../game/config.js';
 import { Terrain, W, H, RES, hillSurfaceY } from './terrain.js';
 import { drawRoomDynamic, lampPositions, emoji } from './rooms.js';
+import { drawGlow } from './sprites.js';
 import { Agents } from './agents.js';
 import { canDig, canPlace, get, idx } from '../game/world.js';
 import { mulberry32, clamp, lerp } from '../util.js';
@@ -66,13 +67,17 @@ export class Renderer {
     this.clampCam();
   }
 
+  /** Auflösungs-Obergrenze je nach Grafikqualität (1 = sparsam … 2 = hoch). */
+  setMaxDpr(v) { this.maxDpr = v; this.resize(); }
+
   resize() {
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDpr ?? 1.5);
     this.dpr = dpr;
     const w = this.canvas.clientWidth || window.innerWidth, h = this.canvas.clientHeight || window.innerHeight;
     this.vw = w; this.vh = h;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
+    this.worldCache = null;
     this.clampCam();
   }
 
@@ -215,7 +220,7 @@ export class Renderer {
     const dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
+    ctx.imageSmoothingQuality = 'low';
 
     // ---- Himmel (Bildschirmraum) ----
     const phase = d.tagPhase;
@@ -244,17 +249,15 @@ export class Renderer {
       const sx = this.vw * (0.1 + 0.8 * dayP);
       const sy = groundScreenY - Math.sin(dayP * Math.PI) * Math.min(groundScreenY * 0.85, 420) - 30;
       if (phase < 0.72) {
-        const g = ctx.createRadialGradient(sx, sy, 4, sx, sy, 90);
-        g.addColorStop(0, 'rgba(255,250,210,1)'); g.addColorStop(0.18, 'rgba(255,230,120,.95)'); g.addColorStop(0.4, 'rgba(255,210,100,.25)'); g.addColorStop(1, 'rgba(255,200,100,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(sx, sy, 90, 0, 7); ctx.fill();
+        drawGlow(ctx, '255,215,110', sx, sy, 90, 0.9);
+        ctx.fillStyle = 'rgba(255,248,205,1)'; ctx.beginPath(); ctx.arc(sx, sy, 15, 0, 7); ctx.fill();
       }
       if (night > 0.1) {
         const mp = clamp((phase - 0.72) / 0.28, 0, 1);
         const mx = this.vw * (0.15 + 0.7 * mp), my = groundScreenY - Math.sin(mp * Math.PI) * Math.min(groundScreenY * 0.8, 380) - 30;
         ctx.globalAlpha = night;
-        const g = ctx.createRadialGradient(mx, my, 2, mx, my, 60);
-        g.addColorStop(0, 'rgba(255,255,240,1)'); g.addColorStop(0.3, 'rgba(240,240,255,.9)'); g.addColorStop(0.35, 'rgba(200,210,255,.18)'); g.addColorStop(1, 'rgba(200,210,255,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(mx, my, 60, 0, 7); ctx.fill();
+        drawGlow(ctx, '200,210,255', mx, my, 60, 0.35);
+        ctx.fillStyle = 'rgba(248,248,255,1)'; ctx.beginPath(); ctx.arc(mx, my, 17, 0, 7); ctx.fill();
         ctx.fillStyle = 'rgba(200,200,215,.5)';
         ctx.beginPath(); ctx.arc(mx - 5, my - 3, 4, 0, 7); ctx.arc(mx + 6, my + 4, 3, 0, 7); ctx.fill();
         ctx.globalAlpha = 1;
@@ -273,17 +276,12 @@ export class Renderer {
     ctx.globalAlpha = 1;
 
     // ---- Weltraum ----
-    ctx.setTransform(dpr * z, 0, 0, dpr * z, -this.cam.x * z * dpr, -this.cam.y * z * dpr);
     const view = { x0: this.cam.x, y0: this.cam.y, x1: this.cam.x + this.vw / z, y1: this.cam.y + this.vh / z };
-    // Bäume hinter der Wiese
-    for (const tr of this.trees) {
-      const w = 340 * tr.s * 1.1, h = 420 * tr.s * 1.1;
-      ctx.drawImage(tr.img, tr.x - w / 2, GROUND * T - h + 6, w, h);
-    }
-    // Gelände
-    ctx.drawImage(this.terrain.canvas, 0, 0, W, H);
-    // Gras
-    ctx.drawImage(this.grass.img, 0, GROUND * T - this.grass.h + 4, W, this.grass.h);
+    // Bäume, Gelände und Gras ändern sich selten: einmal in einen bildschirmgroßen
+    // Zwischenspeicher zeichnen und nur neu bauen, wenn Kamera oder Welt sich ändern.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(this.staticLayer(view), 0, 0);
+    ctx.setTransform(dpr * z, 0, 0, dpr * z, -this.cam.x * z * dpr, -this.cam.y * z * dpr);
     // Wasser-Glitzern
     this.drawWaterShimmer(ctx, view, t);
 
@@ -297,12 +295,10 @@ export class Renderer {
         // warmes Lampenlicht
         ctx.save();
         ctx.globalCompositeOperation = 'lighter';
+        ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
         for (const [lx, ly] of lampPositions(r, g, rx, ry, rw)) {
           const fl = 0.16 + Math.sin(t * 3 + r.id) * 0.02 + Math.sin(t * 7.3 + r.id * 2) * 0.015;
-          const lg = ctx.createRadialGradient(lx, ly, 2, lx, ly, Math.max(rw, rh) * 0.7);
-          lg.addColorStop(0, `rgba(255,190,110,${fl * 1.6})`); lg.addColorStop(1, 'rgba(255,150,60,0)');
-          ctx.fillStyle = lg;
-          ctx.fillRect(rx, ry, rw, rh);
+          drawGlow(ctx, '255,175,90', lx, ly, Math.max(rw, rh) * 0.7, fl * 1.6);
         }
         ctx.restore();
       }
@@ -360,11 +356,41 @@ export class Renderer {
         ctx.setLineDash([]);
       }
     }
-    // Vignette (Bildschirmraum)
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const vg = ctx.createRadialGradient(this.vw / 2, this.vh / 2, Math.min(this.vw, this.vh) * 0.45, this.vw / 2, this.vh / 2, Math.max(this.vw, this.vh) * 0.75);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(10,5,0,.32)');
-    ctx.fillStyle = vg; ctx.fillRect(0, 0, this.vw, this.vh);
+    // (Vignette liegt als statisches CSS-Overlay über dem Canvas – kostet so nichts pro Bild.)
+  }
+
+  /** Bildschirmgroßer Zwischenspeicher für Bäume + Gelände + Gras. */
+  staticLayer(view) {
+    const cw = this.canvas.width, ch = this.canvas.height;
+    if (!this.worldCache || this.worldCache.width !== cw || this.worldCache.height !== ch) {
+      this.worldCache = document.createElement('canvas');
+      this.worldCache.width = cw; this.worldCache.height = ch;
+      this.worldCacheKey = '';
+    }
+    const z = this.cam.z, dpr = this.dpr;
+    const key = `${this.cam.x.toFixed(2)}|${this.cam.y.toFixed(2)}|${z.toFixed(4)}|${this.terrain.version}`;
+    if (key === this.worldCacheKey) return this.worldCache;
+    this.worldCacheKey = key;
+    const c = this.worldCache.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, cw, ch);
+    c.imageSmoothingEnabled = true;
+    c.imageSmoothingQuality = 'medium';
+    c.setTransform(dpr * z, 0, 0, dpr * z, -this.cam.x * z * dpr, -this.cam.y * z * dpr);
+    for (const tr of this.trees) {
+      const w = 340 * tr.s * 1.1, h = 420 * tr.s * 1.1, x = tr.x - w / 2, y = GROUND * T - h + 6;
+      if (x > view.x1 || x + w < view.x0 || y > view.y1 || y + h < view.y0) continue;
+      c.drawImage(tr.img, x, y, w, h);
+    }
+    // Nur den sichtbaren Ausschnitt des großen Geländebildes kopieren
+    const x0 = clamp(Math.floor(view.x0) - 2, 0, W), y0 = clamp(Math.floor(view.y0) - 2, 0, H);
+    const x1 = clamp(Math.ceil(view.x1) + 2, 0, W), y1 = clamp(Math.ceil(view.y1) + 2, 0, H);
+    if (x1 > x0 && y1 > y0) c.drawImage(this.terrain.canvas, x0 * RES, y0 * RES, (x1 - x0) * RES, (y1 - y0) * RES, x0, y0, x1 - x0, y1 - y0);
+    const gy = GROUND * T - this.grass.h + 4;
+    if (gy < view.y1 && gy + this.grass.h > view.y0 && x1 > x0) {
+      c.drawImage(this.grass.img, x0 * RES, 0, (x1 - x0) * RES, this.grass.img.height, x0, gy, x1 - x0, this.grass.h);
+    }
+    return this.worldCache;
   }
 
   drawFarHills(ctx, gy, night) {
@@ -404,9 +430,7 @@ export class Renderer {
       const x = ((i * 211.7 + Math.sin(t * 0.3 + i) * 80) % W + W) % W;
       const y = GROUND * T - 30 - (i % 7) * 22 + Math.sin(t * 0.8 + i * 2) * 15;
       const a = night * (0.5 + 0.5 * Math.sin(t * 3 + i * 1.7));
-      const g = ctx.createRadialGradient(x, y, 0, x, y, 9);
-      g.addColorStop(0, `rgba(230,255,140,${a})`); g.addColorStop(1, 'rgba(230,255,140,0)');
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, 9, 0, 7); ctx.fill();
+      drawGlow(ctx, '230,255,140', x, y, 9, a);
     }
   }
 

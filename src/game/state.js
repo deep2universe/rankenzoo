@@ -1,14 +1,15 @@
 // Spielstand: Neues Spiel, Speichern, Laden.
 import { SAVE_KEY, GROUND, HILL_X, GEBAEUDE } from './config.js';
+import { createRevier } from './revier.js';
 import { createWorld, placeRoom, dig, serializeWorld, deserializeWorld, hillTop, computeConnectivity } from './world.js';
 
 export function newGame(name = 'Königin', koloniename = 'Krümelhausen') {
   const world = createWorld(Math.floor(Math.random() * 1e6));
   const state = {
-    version: 1,
+    version: 2,
     spieler: { name, koloniename },
     zeit: 0,
-    res: { sterne: 40, gang: 14, nahrung: 80, joker: 3 },
+    res: { sterne: 40, gang: 14, nahrung: 80, joker: 3, material: 10, fp: 0 },
     plaene: { brut: 1, wohnen: 1, vorrat: 1 },
     rooms: [],
     nextRoomId: 1,
@@ -19,11 +20,14 @@ export function newGame(name = 'Königin', koloniename = 'Krümelhausen') {
     lernen: { fragen: {}, themen: {}, proFach: {}, runden: 0, richtig: 0, gesamt: 0, serie: 0, besteSerie: 0, verlauf: [] },
     minispiele: {},
     missionen: { erledigt: [], gesehen: [] },
-    stats: { gegraben: 0, gebaut: 0, quizRunden: 0, minispiele: 0, hochzeitsfluege: 0, ersetzt: 0 },
+    stats: { gegraben: 0, gebaut: 0, quizRunden: 0, minispiele: 0, hochzeitsfluege: 0, ersetzt: 0, forschungen: 0, handel: 0, revierBesuche: 0 },
+    forschung: { fertig: [], aktiv: null },
+    befehle: { bauMax: 3, ammen: 'normal' },
     einstellungen: { ton: true, musik: true, vorlesen: true, tempo: 1 },
     tutorial: { schritt: 0 },
     world,
   };
+  state.revier = createRevier(world.seed);
   // Startlayout: Gang vom Hügel hinunter zur Königinnenkammer
   const top = hillTop(world);
   const qy = GROUND + 6;
@@ -77,6 +81,7 @@ export function load() {
     d.lernen.verlauf ??= [];
     d.tutorial ??= { schritt: 99 };
     d.missionen.gesehen ??= [];
+    migriere(d);
     return d;
   } catch (e) {
     console.warn('Laden fehlgeschlagen', e);
@@ -86,4 +91,16 @@ export function load() {
 
 export function resetSave() {
   try { localStorage.removeItem(SAVE_KEY); } catch { /* egal */ }
+}
+
+/** Ältere Spielstände auf den neuen Stand bringen (Strategie-Erweiterung). */
+export function migriere(d) {
+  d.res.material ??= 10;
+  d.res.fp ??= 0;
+  d.forschung ??= { fertig: [], aktiv: null };
+  d.befehle ??= { bauMax: 3, ammen: 'normal' };
+  for (const k of ['forschungen', 'handel', 'revierBesuche']) d.stats[k] ??= 0;
+  if (!d.revier) d.revier = createRevier(d.world.seed ?? 1);
+  d.version = 2;
+  return d;
 }

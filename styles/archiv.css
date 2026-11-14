@@ -1,0 +1,240 @@
+/* ============ Fragen-Archiv, Antwort-Karte (Tooltip) & „Gelöst"-Anzeigen ============ */
+
+/* ---------- Antwort-Karte (schwebend) ---------- */
+.atip {
+  --f1: #ff9f1c; --f2: #ffc93c;
+  --tt-papier: #fffaf0; --tt-papier-2: #f8ead2; --tt-rand: #efd5a8;
+  position: fixed; left: 0; top: 0; z-index: 75; width: min(372px, calc(100vw - 20px));
+  color: #3a2614; font-family: var(--font); user-select: text; -webkit-user-select: text; touch-action: auto;
+  will-change: transform;
+}
+.atip.versteckt { visibility: hidden; }
+.tt-pop {
+  position: relative; border-radius: 22px; border: 2px solid var(--tt-rand);
+  background: linear-gradient(180deg, var(--tt-papier), var(--tt-papier-2));
+  box-shadow: 0 2px 0 rgba(255,255,255,.7) inset, 0 6px 0 #dcc195, 0 18px 38px rgba(40,20,5,.38);
+  animation: ttPop .26s cubic-bezier(.3,1.45,.55,1) both;
+}
+.atip[data-seite="unten"] .tt-pop { --tt-dy: -10px; }
+.atip.weg .tt-pop { animation: ttWeg .15s ease-in forwards; }
+@keyframes ttPop { from { opacity: 0; transform: translateY(var(--tt-dy, 10px)) scale(.86); } }
+@keyframes ttWeg { to { opacity: 0; transform: translateY(var(--tt-dy, 10px)) scale(.94); } }
+
+/* Gepinnt: goldener Rahmen + Stecknadel */
+.atip.angepinnt .tt-pop { border-color: #ffb020; box-shadow: 0 2px 0 rgba(255,255,255,.7) inset, 0 6px 0 #d18a00, 0 0 0 4px rgba(255,201,60,.45), 0 18px 38px rgba(40,20,5,.38); }
+.tt-pin {
+  position: absolute; top: -16px; left: -10px; z-index: 3; font-size: 28px; line-height: 1; pointer-events: none;
+  filter: drop-shadow(0 3px 2px rgba(0,0,0,.3)); opacity: 0; transform: translateY(-14px) rotate(-30deg) scale(.4);
+  transition: opacity .18s, transform .3s cubic-bezier(.3,1.6,.5,1);
+}
+.atip.angepinnt .tt-pin { opacity: 1; transform: rotate(-12deg); }
+.atip.pin-neu .tt-pin { animation: pinRein .45s cubic-bezier(.3,1.6,.5,1); }
+@keyframes pinRein { 0% { transform: translateY(-22px) rotate(-40deg) scale(.5); opacity: 0; } 60% { transform: translateY(2px) rotate(-8deg) scale(1.15); opacity: 1; } }
+
+/* Pfeil zum Eintrag */
+.tt-pfeil {
+  position: absolute; left: var(--pfeil-x, 50%); width: 20px; height: 20px; margin-left: -10px; z-index: 0;
+  transform: rotate(45deg); border: 2px solid var(--tt-rand); border-radius: 4px;
+}
+.atip[data-seite="oben"] .tt-pfeil { bottom: -11px; background: var(--tt-papier-2); border-top-color: transparent; border-left-color: transparent; }
+.atip[data-seite="unten"] .tt-pfeil { top: -11px; background: var(--f1); border-color: var(--f1); border-bottom-color: transparent; border-right-color: transparent; }
+.atip.angepinnt .tt-pfeil { border-color: #ffb020; }
+.atip.angepinnt[data-seite="oben"] .tt-pfeil { border-top-color: transparent; border-left-color: transparent; }
+.atip.angepinnt[data-seite="unten"] .tt-pfeil { border-color: var(--f1); border-bottom-color: transparent; border-right-color: transparent; }
+
+.tt-inhalt { position: relative; z-index: 1; border-radius: 20px 20px 0 0; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+
+/* Schließen-Knopf */
+.tt-zu {
+  position: absolute; top: 9px; right: 9px; z-index: 4; width: 36px; height: 36px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 17px; font-weight: 700; color: #fff;
+  background: rgba(255,255,255,.28); border: 2px solid rgba(255,255,255,.75);
+  box-shadow: 0 2px 0 rgba(0,0,0,.15); text-shadow: 0 1px 2px rgba(0,0,0,.35);
+  transition: transform .2s cubic-bezier(.3,1.6,.5,1), background .15s;
+}
+.tt-zu span { display: block; line-height: 1; transform: translateY(-1px); }
+.tt-zu:hover { transform: rotate(90deg) scale(1.1); background: rgba(255,255,255,.45); }
+.tt-zu:active { transform: rotate(90deg) scale(.92); }
+.tt-zu:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+
+/* Kopfleiste in Fachfarbe */
+.tt-kopf {
+  position: sticky; top: 0; z-index: 2; display: grid; grid-template-columns: auto 1fr; gap: 0 10px; align-items: center;
+  padding: 10px 54px 10px 12px; color: #fff; overflow: hidden; border-radius: 20px 20px 0 0;
+  background: linear-gradient(135deg, var(--f1), var(--f2)); text-shadow: 0 1px 2px rgba(0,0,0,.3);
+}
+.tt-fach-em {
+  grid-row: span 2; width: 42px; height: 42px; border-radius: 14px; display: grid; place-items: center; font-size: 24px;
+  background: rgba(255,255,255,.92); box-shadow: 0 3px 0 rgba(0,0,0,.14); text-shadow: none;
+}
+.tt-kopf-txt { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.tt-kopf-txt b { font-size: 1rem; }
+.tt-kopf-txt small { font-size: .8rem; opacity: .95; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tt-sterne { font-size: .82rem; letter-spacing: 2px; color: #fff6c9; }
+.tt-deko { position: absolute; right: 44px; bottom: -22px; font-size: 64px; opacity: .16; transform: rotate(-14deg); pointer-events: none; }
+
+.tt-koerper { padding: 12px 14px 10px; display: flex; flex-direction: column; gap: 10px; }
+.tt-frage { font-family: 'Nunito', var(--font); font-weight: 800; font-size: 1.04rem; line-height: 1.35; color: #2d1c0c; }
+.tt-bild { font-size: 1.6rem; margin-right: 6px; vertical-align: -3px; }
+.tt-lesetext { background: #fff; border-radius: 12px; border-left: 4px solid var(--honig); padding: 6px 10px; font-size: .86rem; }
+.tt-lesetext summary { cursor: pointer; font-weight: 600; color: #8a5a00; }
+.tt-lesetext div { margin-top: 6px; white-space: pre-line; font-family: 'Nunito', var(--font); line-height: 1.45; max-height: 160px; overflow: auto; }
+
+/* Die richtige Antwort – groß, grün, mit dickem Haken */
+.tt-antwort {
+  display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 16px;
+  background: linear-gradient(135deg, #e6ffdc, #c3f2b4); border: 2px solid #5fd068; box-shadow: 0 3px 0 #8fd88a;
+}
+.tt-haken {
+  flex: 0 0 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; font-size: 26px; font-weight: 900; color: #fff;
+  background: radial-gradient(circle at 32% 28%, #9af59a, #2fae4a 70%); box-shadow: 0 3px 0 #1f8a34, inset 0 2px 0 rgba(255,255,255,.5);
+  text-shadow: 0 2px 0 rgba(0,0,0,.18); animation: hakenPop .5s .12s cubic-bezier(.3,1.8,.5,1) both;
+}
+@keyframes hakenPop { from { transform: scale(0) rotate(-30deg); } }
+.tt-label { font-size: .7rem; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #2c8a3d; }
+.tt-wert {
+  font-family: 'Nunito', var(--font); font-weight: 800; font-size: 1.22rem; line-height: 1.25; color: #13471d; word-break: break-word;
+}
+.tt-kacheln { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.tt-kacheln span { background: #fff; border-radius: 8px; padding: 2px 7px; font-weight: 700; font-family: 'Nunito', var(--font); box-shadow: 0 2px 0 #8fd88a; color: #13471d; }
+.tt-andere { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: .84rem; margin-top: -2px; }
+.tt-andere .tt-label { color: #a0522d; }
+.tt-andere s { background: #fff0ea; color: #9a5a48; border-radius: 8px; padding: 1px 7px; text-decoration-color: #e0705b; text-decoration-thickness: 2px; font-family: 'Nunito', var(--font); }
+
+.tt-erk {
+  display: flex; gap: 8px; align-items: flex-start; padding: 9px 11px; border-radius: 14px;
+  background: #fff3d1; border-left: 5px solid var(--honig); font-family: 'Nunito', var(--font); font-size: .92rem; line-height: 1.45; color: #4a3015;
+}
+.tt-erk > span { font-size: 1.15rem; line-height: 1.2; }
+.tt-fuss { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .78rem; }
+.tt-status { padding: 3px 9px; border-radius: 10px; font-weight: 600; }
+.tt-status.gut { background: #dcf7d5; color: #1f6b30; }
+.tt-status.ueben { background: #ffe6d6; color: #a0461d; }
+.tt-meta { color: #8a6a4a; }
+.tt-hinweis { padding: 6px 14px 9px; font-size: .74rem; color: #9a7a5a; border-top: 1px dashed #e7cfa6; text-align: center; position: relative; z-index: 1; }
+.tt-hinweis-pin { display: none; color: #b07000; font-weight: 600; }
+.atip.angepinnt .tt-hinweis-hover { display: none; }
+.atip.angepinnt .tt-hinweis-pin { display: inline; }
+@media (hover: none) { .tt-hinweis-hover { display: none; } }
+
+/* ---------- Archiv-Ansicht ---------- */
+.archiv { display: flex; flex-direction: column; gap: 12px; }
+.archiv-zusammenfassung { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.archiv-stat { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 16px; background: #fff; box-shadow: 0 3px 0 #e8d6bd; }
+.archiv-stat .em { font-size: 28px; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: #f6ead8; }
+.archiv-stat.gut .em { background: #dcf7d5; } .archiv-stat.ueben .em { background: #ffe6d6; } .archiv-stat.gen .em { background: #e3efff; }
+.archiv-stat b { display: block; font-size: 1.5rem; line-height: 1; color: #2d1c0c; }
+.archiv-stat small { color: #8a6a4a; font-size: .8rem; }
+.archiv-hinweis { margin: 0; padding: 9px 14px; border-radius: 14px; background: linear-gradient(135deg, #fff3d0, #ffe6ad); color: #6a4510; font-size: .92rem; line-height: 1.4; }
+.archiv-filter { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.archiv-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.archiv-chips.faecher-chips { flex-basis: 100%; }
+.archiv-chip {
+  padding: 6px 12px; border-radius: 999px; background: #fff; border: 2px solid #ecdcc6; box-shadow: 0 2px 0 #e2cfb5;
+  font-weight: 600; font-size: .88rem; color: #5a3d20; transition: transform .1s, background .15s, border-color .15s;
+}
+.archiv-chip b { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 2px; border-radius: 10px; background: #f3e4cd; font-size: .78rem; }
+.archiv-chip:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--honig); }
+.archiv-chip.an { background: var(--honig); border-color: #f0a800; color: #3b2300; box-shadow: 0 2px 0 #c98a00; }
+.archiv-chip.an b { background: rgba(255,255,255,.55); }
+.archiv-chip.fach.an { background: linear-gradient(135deg, var(--f1), var(--f2)); border-color: var(--f1); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.3); box-shadow: 0 2px 0 rgba(0,0,0,.2); }
+.archiv-chip.fach.an b { color: #3b2300; text-shadow: none; }
+.archiv-chip:disabled { opacity: .45; cursor: default; }
+.archiv-chip:focus-visible, .archiv-eintrag:focus-visible { outline: 3px solid #ff9f1c; outline-offset: 2px; }
+.archiv-suche-box {
+  display: flex; align-items: center; gap: 6px; margin-left: auto; padding: 0 12px; height: 38px; min-width: 220px;
+  border-radius: 999px; background: #fff; border: 2px solid #ecdcc6;
+}
+.archiv-suche-box:focus-within { border-color: var(--honig); }
+.archiv-suche { border: 0; outline: none; background: transparent; font-family: 'Nunito', var(--font); font-size: .95rem; color: #2d1c0c; width: 100%; user-select: text; -webkit-user-select: text; }
+
+.archiv-liste { display: flex; flex-direction: column; gap: 14px; }
+.archiv-fach { background: #fff; border-radius: 20px; box-shadow: 0 4px 0 #e8d6bd; overflow: hidden; }
+.archiv-fach-kopf {
+  display: flex; align-items: center; gap: 12px; padding: 10px 16px; color: #fff; position: relative;
+  background: linear-gradient(135deg, var(--f1), var(--f2)); text-shadow: 0 1px 2px rgba(0,0,0,.25);
+}
+.archiv-fach-kopf .em { font-size: 26px; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: rgba(255,255,255,.92); text-shadow: none; }
+.archiv-fach-kopf .nm { font-weight: 700; font-size: 1.12rem; line-height: 1.1; }
+.archiv-fach-kopf .ort { font-size: .8rem; opacity: .92; }
+.archiv-fach-stand { margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: .85rem; font-weight: 600; }
+.archiv-fach-stand .track { width: 140px; height: 8px; border-radius: 4px; background: rgba(0,0,0,.18); overflow: hidden; }
+.archiv-fach-stand .track i { display: block; height: 100%; border-radius: 4px; background: #fff; }
+.archiv-thema { padding: 10px 14px 12px; }
+.archiv-thema + .archiv-thema { border-top: 1px dashed #ecdcc6; }
+.archiv-thema h4 { margin: 0 0 8px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: .98rem; color: #3a2614; }
+.archiv-thema h4 .em { font-size: 20px; }
+.archiv-thema h4 .zahl { margin-left: auto; font-size: .78rem; font-weight: 600; color: #8a6a4a; background: #f6ead8; padding: 2px 9px; border-radius: 10px; }
+.archiv-thema h4 .zahl.pokal { background: linear-gradient(135deg, #fff1b8, #ffd56b); color: #7a4a00; box-shadow: 0 2px 0 #e0b040; }
+.archiv-thema.gemeistert { background: linear-gradient(180deg, #fffbea, #fff); }
+.archiv-eintraege { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.archiv-eintrag {
+  --f1: #ffc93c;
+  position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 3px 10px; align-items: start; text-align: left;
+  padding: 9px 12px 8px 10px; border-radius: 14px; background: #fffdf8; border: 2px solid #f1e2cc; box-shadow: 0 3px 0 #ead9c1;
+  color: #3a2614; transition: transform .12s, border-color .15s, background .15s;
+}
+.archiv-eintrag .st { grid-row: span 2; width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; font-size: 17px; background: #e3f8dc; }
+.archiv-eintrag.ueben .st { background: #ffe8d9; }
+.archiv-eintrag .txt { font-family: 'Nunito', var(--font); font-weight: 700; font-size: .9rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.archiv-eintrag .meta { display: flex; gap: 8px; align-items: center; font-size: .74rem; color: #a08262; }
+.archiv-eintrag .meta .auf { margin-left: auto; color: #c07a00; font-weight: 600; opacity: 0; transform: translateX(-4px); transition: opacity .15s, transform .15s; }
+.archiv-eintrag:hover, .archiv-eintrag.tt-aktiv { border-color: var(--f1); background: #fff; transform: translateY(-2px); }
+.archiv-eintrag:hover .meta .auf, .archiv-eintrag.tt-aktiv .meta .auf { opacity: 1; transform: none; }
+.archiv-eintrag.tt-gepinnt { border-color: var(--f1); background: #fff8e6; box-shadow: 0 3px 0 var(--f1), 0 0 0 3px rgba(255,201,60,.35); }
+.archiv-eintrag.tt-gepinnt::after { content: '📌'; position: absolute; top: -9px; right: -5px; font-size: 18px; transform: rotate(15deg); filter: drop-shadow(0 2px 1px rgba(0,0,0,.25)); }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.archiv-leer { text-align: center; padding: 26px 16px; background: #fff; border-radius: 20px; box-shadow: 0 3px 0 #e8d6bd; color: #6a5038; }
+.archiv-leer .em { display: block; font-size: 54px; margin-bottom: 6px; }
+.archiv-leer b { font-size: 1.15rem; color: #3a2614; }
+.archiv-leer p { margin: 6px 0 14px; font-family: 'Nunito', var(--font); }
+
+/* Fragenliste am Ende einer Quizrunde */
+.runden-archiv { margin-top: 22px; text-align: left; padding: 14px; border-radius: 20px; background: rgba(255,255,255,.6); border: 2px dashed #ecd5b0; }
+.archiv-titel { margin: 0; font-size: 1.1rem; }
+
+/* ---------- „Gelöst"-Anzeigen in der Quiz-Auswahl ---------- */
+.fach-karte .geloest-zahl { align-self: flex-start; font-size: .78rem; font-weight: 600; background: rgba(0,0,0,.16); padding: 2px 9px; border-radius: 10px; }
+.fach-karte .geloest-zahl.alles { background: #fff; color: #b07000; text-shadow: none; }
+.themen-kopfzeile { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.themen-kopfzeile .fach-stand { margin-left: auto; font-weight: 600; font-size: .9rem; color: #6a4510; background: #fff; padding: 5px 12px; border-radius: 12px; box-shadow: 0 2px 0 #e8d6bd; }
+.themen-kopfzeile .fach-stand.alles { background: linear-gradient(135deg, #fff1b8, #ffd56b); }
+.thema-btn { position: relative; }
+.thema-btn > div { min-width: 0; flex: 1; }
+.thema-loes { height: 5px; border-radius: 3px; background: #f0e3d0; overflow: hidden; margin-top: 4px; }
+.thema-loes i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, #8be07a, #2fae4a); }
+.thema-btn.gemeistert { background: linear-gradient(135deg, #fffbe6, #fff0b8); border-color: #ffd56b; box-shadow: 0 3px 0 #e8c060; }
+.thema-btn.gemeistert .thema-loes i { background: linear-gradient(90deg, #ffd56b, #f0a800); }
+.thema-btn .pokal { position: absolute; top: -8px; right: -6px; font-size: 24px; transform: rotate(12deg); filter: drop-shadow(0 2px 2px rgba(0,0,0,.25)); }
+.frage-kopf .chip.bonus { background: #e8f1ff; color: #1f5fb0; }
+.gemeistert-screen { text-align: center; max-width: 560px; margin: 0 auto; padding: 10px 0; }
+.gemeistert-screen .pokal-gross { font-size: 92px; line-height: 1; display: inline-block; animation: pokal 1.6s ease-in-out infinite; filter: drop-shadow(0 8px 8px rgba(0,0,0,.2)); }
+@keyframes pokal { 50% { transform: translateY(-8px) rotate(4deg) scale(1.05); } }
+.gemeistert-screen h3 { font-size: 1.5rem; margin: 10px 0 6px; }
+.gemeistert-screen p { font-family: 'Nunito', var(--font); font-size: 1.05rem; line-height: 1.5; color: #4a3015; }
+.gemeistert-screen p.klein { font-size: .92rem; color: #8a6a4a; }
+.gemeistert-screen .knoepfe { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+
+/* Wissensbuch */
+.wissen-fach .geloest-info { font-size: .78rem; color: #2c8a3d; font-weight: 600; }
+.wissen-fach .thema-zeile { grid-template-columns: 26px 1fr 110px 62px; }
+.wissen-fach .thema-zeile.gemeistert .q { color: #b07000; font-weight: 700; }
+
+/* ---------- Schmale Bildschirme ---------- */
+@media (max-width: 560px) {
+  .archiv-zusammenfassung { grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .archiv-stat { flex-direction: column; text-align: center; gap: 4px; padding: 8px 6px; }
+  .archiv-stat .em { width: 34px; height: 34px; font-size: 20px; }
+  .archiv-stat b { font-size: 1.2rem; }
+  .archiv-stat small { font-size: .7rem; line-height: 1.15; display: block; }
+  .archiv-suche-box { margin-left: 0; flex: 1 1 100%; min-width: 0; }
+  .archiv-chip .nm { display: none; }
+  .archiv-fach-kopf { flex-wrap: wrap; padding: 10px 12px; }
+  .archiv-fach-stand { margin-left: 0; flex-basis: 100%; align-items: stretch; }
+  .archiv-fach-stand .track { width: 100%; }
+  .archiv-thema { padding: 10px 10px 12px; }
+  .archiv-eintraege { grid-template-columns: 1fr; }
+  .archiv-thema h4 .zahl { margin-left: 0; }
+  .tt-wert { font-size: 1.1rem; }
+  .wissen-fach .thema-zeile { grid-template-columns: 22px 1fr 70px 52px; }
+}

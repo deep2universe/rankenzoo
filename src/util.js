@@ -42,7 +42,7 @@ export function h(sel, attrs, ...kids) {
     if (r[0] === '.') el.classList.add(r.slice(1));
     else if (r[0] === '#') el.id = r.slice(1);
   }
-  if (attrs && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) {
+  if (attrs != null && attrs !== false && (typeof attrs !== 'object' || attrs instanceof Node || Array.isArray(attrs))) {
     kids.unshift(attrs); attrs = null;
   }
   if (attrs) {

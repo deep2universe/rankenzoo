@@ -4,7 +4,9 @@ import { MATHE_GEN, ENGLISCH_GEN } from './generators.js';
 import { shuffle, pick } from '../util.js';
 
 const BANK = {}; // fach -> { themen, fragen, gens }
+const BY_ID = new Map(); // id -> Frage (kuratiert)
 const LEITNER_ABSTAND = [1, 2, 4, 7, 12, 20];
+export const GEN_ARCHIV_MAX = 40; // so viele Zufallsaufgaben merkt sich das Fragen-Archiv
 
 export async function loadBanks() {
   const faecher = Object.keys(FAECHER);
@@ -14,6 +16,7 @@ export async function loadBanks() {
     const mod = r.status === 'fulfilled' ? r.value.default : { themen: {}, fragen: [] };
     if (r.status === 'rejected') console.info(`Fragenbank ${f} nicht gefunden – nur Generatoren.`);
     BANK[f] = { themen: { ...mod.themen }, fragen: (mod.fragen ?? []).map(q => ({ ...q, fach: f })), gens: {} };
+    for (const q of BANK[f].fragen) BY_ID.set(q.id, q);
   });
   for (const [k, g] of Object.entries(MATHE_GEN)) addGen('mathe', k, g);
   for (const [k, g] of Object.entries(ENGLISCH_GEN)) addGen('englisch', k, g);
@@ -38,6 +41,37 @@ export function anzahlFragen() {
   return n;
 }
 
+/** Kuratierte Frage per ID (oder null, falls es sie nicht mehr gibt). */
+export function frageById(id) { return BY_ID.get(id) ?? null; }
+
+/** Wurde diese (kuratierte) Frage schon einmal richtig beantwortet? Dann kommt sie nie wieder. */
+export function istGeloest(state, id) { return (state.lernen.fragen[id]?.r ?? 0) > 0; }
+
+/** Lösungsstand eines Themas: { gesamt, geloest, offen, gemeistert, generator } */
+export function themaStand(state, fach, thema) {
+  const b = BANK[fach];
+  if (b?.gens[thema]) return { gesamt: Infinity, geloest: 0, offen: Infinity, gemeistert: false, generator: true };
+  const qs = b ? b.fragen.filter(q => q.thema === thema) : [];
+  const geloest = qs.reduce((n, q) => n + (istGeloest(state, q.id) ? 1 : 0), 0);
+  return { gesamt: qs.length, geloest, offen: qs.length - geloest, gemeistert: qs.length > 0 && geloest === qs.length, generator: false };
+}
+
+/** Lösungsstand eines Fachs (nur kuratierte Fragen): { gesamt, geloest, offen, gemeistert, generatoren } */
+export function fachStand(state, fach) {
+  const b = BANK[fach];
+  const qs = b?.fragen ?? [];
+  const geloest = qs.reduce((n, q) => n + (istGeloest(state, q.id) ? 1 : 0), 0);
+  return { gesamt: qs.length, geloest, offen: qs.length - geloest, gemeistert: qs.length > 0 && geloest === qs.length, generatoren: Object.keys(b?.gens ?? {}).length };
+}
+
+/** Kann für Fach/Thema überhaupt eine Runde gebaut werden? (offene Fragen oder Zufallsaufgaben) */
+export function rundeMoeglich(state, fach, thema = null) {
+  const b = BANK[fach];
+  if (!b) return false;
+  if (Object.keys(b.gens).length) return true;
+  return b.fragen.some(q => (!thema || q.thema === thema) && !istGeloest(state, q.id));
+}
+
 function themaInfo(lernen, fach, thema) {
   const k = `${fach}:${thema}`;
   return lernen.themen[k] ?? { m: 0.4, n: 0, r: 0 };
@@ -50,18 +84,33 @@ function zielStufe(m) {
   return x < 0.4 ? 2 : 3;
 }
 
-/** Eine Runde zusammenstellen. thema = null → gemischt (Interleaving). */
+/**
+ * Eine Runde zusammenstellen. thema = null → gemischt (Interleaving).
+ * Bereits richtig beantwortete (gelöste) Fragen kommen nie wieder. Ist ein Thema gemeistert,
+ * wird mit Zufallsaufgaben des Fachs aufgefüllt (falls es Generatoren gibt) – sonst ist die Runde
+ * kürzer oder leer (die Oberfläche zeigt dann eine freundliche Meldung).
+ */
 export function buildRound(state, fach, thema = null, anzahl = QUIZ.fragenProRunde) {
   const L = state.lernen;
   const b = BANK[fach];
+  if (!b) return [];
   const runde = L.runden;
   const out = [];
   const benutzt = new Set();
+  const genTexte = new Set();
   const verlauf = new Set(L.verlauf ?? []);
-  let pool = b.fragen.filter(q => !thema || q.thema === thema);
+  const pool = b.fragen.filter(q => (!thema || q.thema === thema) && !istGeloest(state, q.id));
   const genKeys = Object.keys(b.gens).filter(k => !thema || k === thema);
+  const genFrage = (th, stufe, extra) => {
+    // bis zu 6 Versuche, damit keine Zufallsaufgabe doppelt in einer Runde vorkommt
+    let q;
+    for (let v = 0; v < 6; v++) { q = b.gens[th].gen(stufe); if (!genTexte.has(q.frage)) break; }
+    if (genTexte.has(q.frage)) return null;
+    genTexte.add(q.frage);
+    return prep({ ...q, id: `gen-${th}-${Date.now()}-${out.length}`, fach, thema: th, stufe, generiert: true, ...extra });
+  };
 
-  // 1) Fällige Wiederholungen (falsch beantwortete zuerst)
+  // 1) Fällige Wiederholungen (falsch beantwortete, noch nicht gelöste zuerst)
   const faellig = pool.filter(q => {
     const s = L.fragen[q.id];
     return s && s.b < 3 && s.d <= runde;
@@ -75,10 +124,11 @@ export function buildRound(state, fach, thema = null, anzahl = QUIZ.fragenProRun
     const th = themen[ti++ % themen.length];
     const info = themaInfo(L, fach, th);
     const stufe = zielStufe(info.m);
-    if (b.gens[th] && (genKeys.includes(th))) {
+    if (b.gens[th] && genKeys.includes(th)) {
       // Generator-Thema – bei gemischten Runden nur gelegentlich, damit kuratierte Fragen Vorrang haben
       if (!thema && pool.length > 20 && Math.random() < 0.55) continue;
-      out.push(prep({ ...b.gens[th].gen(stufe), id: `gen-${th}-${Date.now()}-${out.length}`, fach, thema: th, stufe, generiert: true }));
+      const g = genFrage(th, stufe);
+      if (g) out.push(g);
       continue;
     }
     const kand = pool.filter(q => q.thema === th && !benutzt.has(q.id));
@@ -89,6 +139,16 @@ export function buildRound(state, fach, thema = null, anzahl = QUIZ.fragenProRun
     const passend = quelle.filter(q => q.stufe === stufe);
     const q = pick(passend.length ? passend : quelle);
     out.push(prep(q)); benutzt.add(q.id);
+  }
+
+  // 3) Zu wenige offene Fragen (Thema gemeistert)? → mit Zufallsaufgaben des Fachs auffüllen
+  const fuellKeys = genKeys.length ? genKeys : Object.keys(b.gens);
+  const bonus = !!thema && !b.gens[thema];
+  guard = 0;
+  while (out.length < anzahl && fuellKeys.length && guard++ < 40) {
+    const th = pick(fuellKeys);
+    const g = genFrage(th, zielStufe(themaInfo(L, fach, th).m), bonus ? { bonus: true } : null);
+    if (g) out.push(g);
   }
   return shuffle(out.slice(0, anzahl).map((q, i) => ({ ...q, _n: i })));
 }
@@ -144,9 +204,16 @@ export function recordAnswer(state, q, richtig, quizBonus = 0) {
   t.n++; if (richtig) t.r++;
   const gewicht = q.stufe === 3 ? 0.25 : q.stufe === 2 ? 0.2 : 0.15;
   t.m = t.m * (1 - gewicht) + (richtig ? 1 : 0) * gewicht;
-  if (!q.generiert) {
+  if (q.generiert) {
+    // Zufallsaufgaben haben keine feste ID → Schnappschuss fürs Fragen-Archiv merken
+    const arch = (L.genArchiv ??= []);
+    arch.push({ frage: q.frage, antwort: richtigeAntwortText(q), erklaerung: q.erklaerung ?? '', richtig: !!richtig,
+      fach: q.fach, thema: q.thema, stufe: q.stufe, zeit: Date.now(), ...(q.sprache ? { sprache: q.sprache } : null) });
+    if (arch.length > GEN_ARCHIV_MAX) arch.splice(0, arch.length - GEN_ARCHIV_MAX);
+  } else {
     const s = (L.fragen[q.id] ??= { b: 0, d: 0, n: 0, r: 0 });
     s.n++;
+    s.z = Date.now(); // zuletzt gefragt (fürs Fragen-Archiv)
     if (richtig) { s.r++; s.b = Math.min(5, s.b + 1); } else s.b = 0;
     s.d = L.runden + LEITNER_ABSTAND[s.b];
     L.verlauf = [...(L.verlauf ?? []).filter(id => id !== q.id), q.id].slice(-60);

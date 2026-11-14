@@ -1,6 +1,8 @@
 // Simulation des Ameisenstaates: Arbeit, Nahrung, Brut, Zufriedenheit.
 import { GEBAEUDE, SIM, BEDUERFNISSE, rangVon } from './config.js';
 import { computeConnectivity } from './world.js';
+import { forschungsEffekte, forschungTick } from './forschung.js';
+import { revierBedarf, revierRaten, revierTick } from './revier.js';
 import { emit } from '../events.js';
 import { clamp } from '../util.js';
 
@@ -11,10 +13,16 @@ export function derive(state) {
   const fx = {
     brutTempo: 0, sammelBonus: 0, tempo: 0, quizBonus: 0, ausbildung: 0, wohnBonus: 0, pilzBonus: 0,
     verbrauch: 0, sterneProMin: 0, zufriedenBonus: 0, joker: 0,
+    fp: 0, fpMult: 0, forschTempo: 0, wacheStaerke: 0, sicht: 0, expSlots: 0, expTempo: 0, revierBonus: 0, handel: 0,
+    lagerBonus: 0, weideBonus: 0, eiTempo: 0, bauTempo: 0, hygieneMult: 0, waermeMult: 0, freizeitMult: 0,
+    quelleNahrung: 0, quelleNachwuchs: 0, schatzBonus: 0,
   };
+  // Forschung wirkt immer (unabhängig vom Personal)
+  for (const [k, val] of Object.entries(forschungsEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
   const fertig = state.rooms.filter(r => r.bau >= 1 && r.verbunden !== false);
   // Spezial-Effekte, die andere Effizienzen beeinflussen, zuerst grob sammeln
   for (const r of fertig) if (r.typ === 'universitaet') fx.ausbildung += GEBAEUDE.universitaet.effekte.ausbildung;
+  const befehle = state.befehle ?? { bauMax: 3, ammen: 'normal' };
 
   // --- Arbeitsverteilung ---
   let frei = v.arbeiterinnen;
@@ -22,14 +30,15 @@ export function derive(state) {
   const baustellen = state.rooms.filter(r => r.bau < 1 && r.verbunden !== false);
   const bauProStelle = new Map();
   for (const r of baustellen) {
-    const n = Math.min(3, Math.max(0, Math.floor(frei * 0.5) - jobs.bau), frei);
+    const n = Math.min(befehle.bauMax ?? 3, Math.max(0, Math.floor(frei * 0.6) - jobs.bau), frei);
     const k = Math.max(frei > 0 ? 1 : 0, n);
     bauProStelle.set(r.id, k);
     jobs.bau += k; frei -= k;
   }
   const brutAnz = state.brut.length;
-  const ammenWunsch = Math.ceil(brutAnz / 5);
-  jobs.ammen = Math.min(ammenWunsch, Math.floor(frei * 0.35) + (frei > 0 && ammenWunsch > 0 ? 1 : 0), frei);
+  const ammenF = befehle.ammen === 'viel' ? 1.7 : befehle.ammen === 'wenig' ? 0.5 : 1;
+  const ammenWunsch = Math.ceil((brutAnz / 5) * ammenF);
+  jobs.ammen = Math.min(ammenWunsch, Math.floor(frei * 0.35 * Math.max(1, ammenF)) + (frei > 0 && ammenWunsch > 0 ? 1 : 0), frei);
   frei -= jobs.ammen;
   // Personal: Nahrungsproduzenten zuerst
   const prio = t => (GEBAEUDE[t].effekte?.nahrung ? 0 : t === 'koenigin' ? 1 : 2);
@@ -43,6 +52,14 @@ export function derive(state) {
     verfuegbar -= k; jobs.personal += k;
   }
   frei -= jobs.personal;
+  // Befehle der Königin: Revier-Trupps (Sammlerinnen, Wächterinnen, Expeditionen)
+  const bedarf = state.revier ? revierBedarf(state.revier) : { summe: 0, s: 0, w: 0, e: 0 };
+  const revierFrei = Math.max(0, frei - Math.min(2, frei));
+  // Expeditionen sind schon unterwegs – sie zählen immer voll
+  const revierFaktor = bedarf.summe ? Math.min(1, Math.max(0, revierFrei - bedarf.e) / Math.max(1, bedarf.s + bedarf.w)) : 1;
+  jobs.revier = Math.min(revierFrei, bedarf.e + Math.round((bedarf.s + bedarf.w) * revierFaktor));
+  jobs.exp = bedarf.e;
+  frei -= jobs.revier;
   jobs.sammler = Math.max(0, frei);
 
   // --- Effizienz & Effekte ---
@@ -55,31 +72,37 @@ export function derive(state) {
     const g = GEBAEUDE[r.typ];
     const e = (g.personal ? (personal.get(r.id) ?? 0) / g.personal : 1) * (1 + fx.ausbildung);
     eff.set(r.id, e);
-    for (const [k, val] of Object.entries(g.liefert ?? {})) versorgung[k] += val * Math.min(e, 1.2);
+    for (const [k, val] of Object.entries(g.liefert ?? {})) versorgung[k] += val * Math.min(e, 1.2) * (1 + (k === 'freizeit' ? fx.freizeitMult : k === 'hygiene' ? fx.hygieneMult : k === 'waerme' ? fx.waermeMult : 0));
     const ef = g.effekte ?? {};
     if (ef.wohnraum) wohnraum += ef.wohnraum;
     if (ef.lager) lager += ef.lager * Math.max(0.5, Math.min(e, 1));
     if (ef.brutPlatz) brutPlatz += ef.brutPlatz;
-    for (const key of ['brutTempo', 'sammelBonus', 'tempo', 'quizBonus', 'wohnBonus', 'pilzBonus', 'verbrauch', 'sterneProMin', 'zufriedenBonus', 'joker']) {
+    for (const key of ['brutTempo', 'sammelBonus', 'tempo', 'quizBonus', 'wohnBonus', 'pilzBonus', 'verbrauch', 'sterneProMin', 'zufriedenBonus', 'joker',
+      'fp', 'forschTempo', 'wacheStaerke', 'sicht', 'expSlots', 'expTempo', 'revierBonus', 'handel', 'lagerBonus']) {
       if (ef[key]) fx[key] += ef[key] * Math.min(e, 1.1);
     }
   }
   wohnraum = Math.round(SIM.grundWohnraum + (wohnraum - SIM.grundWohnraum) * (1 + fx.wohnBonus));
+  lager = Math.round(lager * (1 + fx.lagerBonus));
   for (const r of fertig) {
     const g = GEBAEUDE[r.typ];
     if (g.effekte?.nahrung) {
-      const bonus = r.typ === 'pilz' ? 1 + fx.pilzBonus : 1;
+      const bonus = r.typ === 'pilz' ? 1 + fx.pilzBonus : r.typ === 'blattlaus' ? 1 + fx.weideBonus : 1;
       nahrungBau += g.effekte.nahrung * eff.get(r.id) * bonus * (1 + fx.tempo);
     }
   }
   const tagPhase = (state.zeit % SIM.tagDauer) / SIM.tagDauer;
   const istNacht = tagPhase > 0.72 || tagPhase < 0.06;
   // abnehmender Ertrag: je mehr Sammlerinnen, desto weiter die Wege
-  const sammelRate = (jobs.sammler / (1 + jobs.sammler / 40)) * SIM.sammeln * (1 + fx.sammelBonus) * (1 + fx.tempo) * (istNacht ? 0.5 : 1);
+  const regen = state.revier?.wetter?.typ === 'regen';
+  const sammelRate = (jobs.sammler / (1 + jobs.sammler / 40)) * SIM.sammeln * (1 + fx.sammelBonus) * (1 + fx.tempo) * (istNacht ? 0.5 : 1) * (regen ? 0.6 : 1);
+  const revier = state.revier ? revierRaten(state, fx, revierFaktor, tagPhase) : { nahrung: 0, material: 0, sterne: 0, tau: 0, pro: new Map() };
+  versorgung.hygiene += revier.tau;
+  const fpProSek = ((SIM.fpGrund + fx.fp) / 60) * (1 + fx.fpMult);
   const vb = SIM.verbrauch;
   const larven = state.brut.filter(b => b.s === 'larve').length;
   const verbrauch = (v.arbeiterinnen * vb.arbeiterin + v.drohnen * vb.drohne + vb.koenigin + larven * vb.larve) * (1 + fx.verbrauch);
-  const nahrungProSek = sammelRate + nahrungBau;
+  const nahrungProSek = sammelRate + nahrungBau + revier.nahrung;
 
   // --- Bedürfnisse ---
   const erwachsene = Math.max(1, pop);
@@ -97,7 +120,7 @@ export function derive(state) {
   return {
     pop, jobs, bauProStelle, personal, eff, versorgung, quote, zufriedenheit, wohnraum, lager, brutPlatz,
     nahrungProSek, verbrauch, fx, tagPhase, istNacht, tag: Math.floor(state.zeit / SIM.tagDauer) + 1,
-    rang: rangVon(pop),
+    rang: rangVon(pop), revier, revierFaktor, bedarf, fpProSek, sammelRate, nahrungBau, regen,
   };
 }
 
@@ -115,7 +138,7 @@ export function tick(state, dt) {
   for (const r of state.rooms) {
     if (r.bau >= 1 || r.verbunden === false) continue;
     const k = d.bauProStelle.get(r.id) ?? 0;
-    r.bau = Math.min(1, r.bau + (dt * k * (1 + d.fx.tempo)) / GEBAEUDE[r.typ].bauzeit);
+    r.bau = Math.min(1, r.bau + (dt * k * (1 + d.fx.tempo) * (1 + d.fx.bauTempo)) / GEBAEUDE[r.typ].bauzeit);
     if (r.bau >= 1) {
       state.stats.gebaut++;
       emit('gebaut', r);
@@ -127,7 +150,7 @@ export function tick(state, dt) {
   const erwachsen = v.arbeiterinnen + v.drohnen;
   const platz = state.brut.length < d.brutPlatz && erwachsen + state.brut.length < d.wohnraum + 4;
   const freude = 0.45 + d.zufriedenheit / 100;
-  v.eiTimer += dt * freude * (1 + 0.15 * (state.kronenStufe - 1));
+  v.eiTimer += dt * freude * (1 + 0.15 * (state.kronenStufe - 1)) * (1 + d.fx.eiTempo);
   if (v.eiTimer >= SIM.eiIntervall) {
     v.eiTimer = 0;
     if (hatFutter && platz) {
@@ -180,6 +203,11 @@ export function tick(state, dt) {
       state.res.sterne += n;
     }
   }
+
+  // Forschung & Revier
+  state.res.fp = (state.res.fp ?? 0) + d.fpProSek * dt;
+  if (state.forschung) forschungTick(state, dt, 1 + d.fx.forschTempo);
+  if (state.revier) revierTick(state, d, dt);
 
   // Neuer Tag
   const tagJetzt = Math.floor(state.zeit / SIM.tagDauer);
