@@ -1,12 +1,13 @@
 // Quiz-Oberfläche: Fachwahl → Themenwahl → Fragerunde → Truhe mit Bauplänen.
 import { h, pick, shuffle, fill } from '../util.js';
 import { FAECHER, FACH_BAUPLAENE, GEBAEUDE, QUIZ } from '../game/config.js';
-import { buildRound, themenVon, recordAnswer, pruefeEingabe, richtigeAntwortText, meisterschaft, fachDesTages, prep } from '../quiz/engine.js';
+import { buildRound, themenVon, recordAnswer, pruefeEingabe, richtigeAntwortText, meisterschaft, fachDesTages, prep, themaStand, fachStand, rundeMoeglich, istGeloest } from '../quiz/engine.js';
 import { planAuswahl, grantPlan } from '../game/actions.js';
 import { openModal, sterneFlug, konfetti, toast } from './modal.js';
 import { sfx, speak, canSpeak, stopSpeak } from '../audio.js';
 import { drawAnt } from '../render/antdraw.js';
 import { emit } from '../events.js';
+import { openFragenArchiv, rundenListe, closeTooltip } from './archiv.js';
 
 const LOB = ['Super gemacht!', 'Klasse!', 'Richtig – du bist eine echte Wissens-Ameise!', 'Spitze!', 'Genau so!', 'Wow, stark!', 'Toll gedacht!'];
 const MUT = ['Nicht schlimm – jetzt weißt du es!', 'Fehler sind zum Lernen da!', 'Fast! Lies dir die Erklärung durch.', 'Kopf hoch – beim nächsten Mal klappt es!', 'Gut, dass wir das üben!'];
@@ -18,6 +19,8 @@ function maskottchen() {
   const st = { mood: 'idle', t: 0, moodT: 0, raf: 0 };
   let last = performance.now();
   const loop = now => {
+    // 30 Bilder pro Sekunde reichen für das Maskottchen
+    if (now - last < 32) { if (cv.isConnected) st.raf = requestAnimationFrame(loop); return; }
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
     st.t += dt; st.moodT += dt;
     ctx.setTransform(2, 0, 0, 2, 0, 0);
@@ -45,23 +48,28 @@ export function openQuiz(game) {
   game.pause(true);
   m.bg.addEventListener('animationend', () => {}, { once: true });
   const origClose = m.close;
-  m.close = r => { origClose(r); game.pause(false); };
+  m.close = r => { closeTooltip(); origClose(r); game.pause(false); };
 
   function fachWahl() {
     m.setTitel('Wissens-Expedition', 'Wähle ein Fach – richtige Antworten bringen Sterne und Baupläne!');
     m.setFarbe('#ff9f1c', '#ffc93c'); m.setIcon('📚');
     const karten = Object.entries(FAECHER).map(([k, f]) => {
       const mm = meisterschaft(s, k);
+      const fs = fachStand(s, k);
       return h('button.fach-karte', { style: { '--f1': f.farbe, '--f2': f.farbe2 }, onclick: () => themenWahl(k) },
         k === fdt ? h('span.tag-badge', '⭐ Fach des Tages ×1,5') : null,
         h('span.deko', f.icon), h('span.em', f.icon), h('span.nm', f.name), h('span.ort', f.ort),
         h('span.plaene', { title: 'Mögliche Baupläne' }, FACH_BAUPLAENE[k].map(p => GEBAEUDE[p].icon).join('')),
+        h('span.geloest-zahl' + (fs.gemeistert ? '.alles' : ''), { title: `${fs.geloest} von ${fs.gesamt} Fragen richtig gelöst` },
+          fs.gemeistert ? `🏆 Alle ${fs.gesamt} gelöst!` : `📚 Gelöst: ${fs.geloest} / ${fs.gesamt}`),
         h('div.meister', h('span', 'Können'), h('div.track', h('i', { style: { width: Math.round(mm * 100) + '%' } })), h('b', Math.round(mm * 100) + '%')),
       );
     });
     m.render(h('div.faecher', karten),
       h('p', { style: { textAlign: 'center', color: '#8a6a4a', margin: '16px 0 0', fontSize: '.92rem' } },
-        `🃏 Joker: ${s.res.joker}  ·  ✅ Richtige Antworten bisher: ${s.lernen.richtig}  ·  🔥 Beste Serie: ${s.lernen.besteSerie}`));
+        `🃏 Joker: ${s.res.joker}  ·  ✅ Richtige Antworten bisher: ${s.lernen.richtig}  ·  🔥 Beste Serie: ${s.lernen.besteSerie}`),
+      h('div', { style: { textAlign: 'center', marginTop: '12px' } },
+        h('button.btn.grau.klein', { onclick: () => openFragenArchiv(game, { ausQuiz: true }) }, '🗂️ Fragen-Archiv – Antworten nachschauen')));
   }
 
   function themenWahl(fach) {
@@ -74,26 +82,43 @@ export function openQuiz(game) {
       const n = i.m * Math.min(1, i.n / 6);
       return n > 0.8 ? '★★★' : n > 0.55 ? '★★☆' : n > 0.3 ? '★☆☆' : '☆☆☆';
     };
+    const fs = fachStand(s, fach);
+    const hatGens = fs.generatoren > 0;
     m.render(
-      h('button.btn.grau.klein', { onclick: fachWahl }, '← Andere Fächer'),
+      h('div.themen-kopfzeile',
+        h('button.btn.grau.klein', { onclick: fachWahl }, '← Andere Fächer'),
+        h('span.fach-stand' + (fs.gemeistert ? '.alles' : ''), fs.gemeistert ? `🏆 Alle ${fs.gesamt} Fragen gelöst!` : `📚 Gelöst: ${fs.geloest} / ${fs.gesamt}`),
+        h('button.btn.grau.klein', { onclick: () => openFragenArchiv(game, { fach, ausQuiz: true }) }, '🗂️ Archiv')),
       h('div.themen-liste',
-        h('button.thema-btn.alle', { onclick: () => runde(fach, null) }, h('span.em', '🎲'),
-          h('div', h('div.nm', 'Alle Themen gemischt'), h('div.bs', 'Empfohlen! Gemischtes Üben merkt man sich am besten.'))),
-        themen.map(t => h('button.thema-btn', { onclick: () => runde(fach, t.key), title: t.bildungsplan ?? '' },
-          h('span.em', t.icon),
-          h('div', h('div.nm', t.name), h('div.bs', t.beschreibung ?? ''), h('div.sterne', { style: { color: '#e09a00' } }, stern(t.key), t.generator ? '  ∞ Zufallsaufgaben' : `  ${t.anzahl} Fragen`)))),
+        h('button.thema-btn.alle' + (fs.gemeistert ? '.gemeistert' : ''), { onclick: () => runde(fach, null) }, h('span.em', fs.gemeistert ? '🏆' : '🎲'),
+          h('div', h('div.nm', 'Alle Themen gemischt'), h('div.bs', fs.gemeistert
+            ? (hatGens ? `Du hast alle ${fs.gesamt} Fragen gelöst! Jetzt warten Zufallsaufgaben auf dich.` : `Wow! Du hast alle ${fs.gesamt} Fragen in diesem Fach gelöst!`)
+            : 'Empfohlen! Gemischtes Üben merkt man sich am besten.'))),
+        themen.map(t => {
+          const st = themaStand(s, fach, t.key);
+          const info = t.generator ? '  ∞ Zufallsaufgaben'
+            : st.gemeistert ? `  🏆 alle ${st.gesamt} Fragen gelöst` : `  ${st.geloest} von ${st.gesamt} gelöst`;
+          return h('button.thema-btn' + (st.gemeistert ? '.gemeistert' : ''), { onclick: () => runde(fach, t.key), title: t.bildungsplan ?? '' },
+            h('span.em', t.icon),
+            h('div', h('div.nm', t.name),
+              h('div.bs', st.gemeistert ? (hatGens ? 'Gemeistert! Weiter geht\'s mit Bonus-Aufgaben 🎲' : 'Gemeistert! Hier bist du Profi.') : t.beschreibung ?? ''),
+              h('div.sterne', { style: { color: '#e09a00' } }, stern(t.key), info),
+              t.generator ? null : h('div.thema-loes', { 'aria-hidden': 'true' }, h('i', { style: { width: (st.gesamt ? st.geloest / st.gesamt * 100 : 0) + '%' } }))),
+            st.gemeistert ? h('span.pokal', { title: 'Thema gemeistert!' }, '🏆') : null);
+        }),
       ),
     );
   }
 
   function runde(fach, thema) {
     const f = FAECHER[fach];
+    if (!rundeMoeglich(s, fach, thema)) return gemeistert(fach, thema);
     const fragen = buildRound(s, fach, thema);
-    if (!fragen.length) { toast('Für dieses Thema gibt es noch keine Fragen.', { icon: '🤷' }); return; }
+    if (!fragen.length) return gemeistert(fach, thema);
     const masc = maskottchen();
-    const blase = h('div.sprechblase', 'Los geht\'s! Lies jede Frage genau.');
+    const blase = h('div.sprechblase', fragen.every(q => q.bonus) ? '🏆 Thema gemeistert! Jetzt gibt es Bonus-Aufgaben.' : 'Los geht\'s! Lies jede Frage genau.');
     const quizBonus = game.d.fx.quizBonus + (fach === fdt ? 0.5 : 0);
-    const ergebnis = { richtig: 0, sterne: 0, falsche: [], zweite: 0, antworten: [] };
+    const ergebnis = { richtig: 0, sterne: 0, falsche: [], zweite: 0, antworten: [], n: fragen.length, liste: [] };
     let i = 0, zweiteChance = false, queue = fragen;
     const fortschritt = h('div.fortschritt');
     const frageBox = h('div');
@@ -118,6 +143,7 @@ export function openQuiz(game) {
         h('span.chip', `Frage ${i + 1} von ${queue.length}`),
         h('span.chip', '★'.repeat(q.stufe) + '☆'.repeat(3 - q.stufe)),
         zweiteChance ? h('span.chip.wdh', '🔁 Zweite Chance') : q.wiederholung ? h('span.chip.wdh', '🔁 Wiederholung') : null,
+        q.bonus && !zweiteChance ? h('span.chip.bonus', { title: 'Alle Fragen dieses Themas sind gelöst – das ist eine Zufallsaufgabe.' }, '🎲 Bonus-Aufgabe') : null,
         canSpeak() ? h('button.vorlesen', { title: 'Vorlesen', onclick: sprecheFrage }, '🔊') : null,
       );
       const tippBox = h('div');
@@ -129,7 +155,13 @@ export function openQuiz(game) {
         beantwortet = true;
         stopSpeak();
         ergebnis.antworten[zweiteChance ? fragen.length + i : i] = richtig;
+        const vorherGemeistert = !q.generiert && themaStand(s, fach, q.thema).gemeistert;
         let sterne = recordAnswer(s, q, richtig, quizBonus);
+        ergebnis.liste.push({ q, richtig, zweite: zweiteChance });
+        if (richtig && !q.generiert && !vorherGemeistert && themaStand(s, fach, q.thema).gemeistert) {
+          const tn = themenVon(fach).find(t => t.key === q.thema)?.name ?? 'Thema';
+          setTimeout(() => { toast(`Thema „${tn}" gemeistert – alle Fragen gelöst!`, { icon: '🏆', art: 'gold', dauer: 4200 }); konfetti(30); }, 600);
+        }
         if (zweiteChance) sterne = Math.ceil(sterne / 2);
         if (richtig) {
           ergebnis.richtig++; if (zweiteChance) ergebnis.zweite++;
@@ -289,7 +321,9 @@ export function openQuiz(game) {
       if (i < queue.length) return zeige();
       if (!zweiteChance && ergebnis.falsche.length) {
         zweiteChance = true;
-        queue = ergebnis.falsche.slice(0, 3).map(q => prep(q, true));
+        // Zweite Chance nur für Fragen, die noch nicht gelöst sind (gelöste kommen nie wieder)
+        queue = ergebnis.falsche.filter(q => q.generiert || !istGeloest(s, q.id)).slice(0, 3).map(q => prep(q, true));
+        if (!queue.length) return belohnung(fach, ergebnis);
         i = 0;
         blase.textContent = 'Zweite Chance! Jetzt kennst du die Erklärungen – probier es nochmal.';
         masc.set('idle');
@@ -308,8 +342,10 @@ export function openQuiz(game) {
     const ersteRunde = erg.richtig - erg.zweite;
     const gang = erg.richtig * QUIZ.gangProRichtig;
     s.res.gang += gang;
-    const planAnzahl = erg.richtig >= 3 ? (ersteRunde >= QUIZ.fragenProRunde ? 2 : 1) : 0;
-    const perfekt = ersteRunde >= QUIZ.fragenProRunde;
+    const n = erg.n || QUIZ.fragenProRunde; // Runden können kürzer sein, wenn fast alles gelöst ist
+    const noetig = Math.min(3, n);
+    const perfekt = ersteRunde >= n;
+    const planAnzahl = erg.richtig >= noetig ? (perfekt && n >= QUIZ.fragenProRunde ? 2 : 1) : 0;
     if (perfekt) { konfetti(50); sfx.fanfare(); } else sfx.coin();
     m.setTitel(perfekt ? 'Perfekt! Alles richtig!' : 'Expedition geschafft!', `${f.name} · ${erg.richtig} richtige Antworten`);
     m.setIcon(perfekt ? '🏆' : '🎁');
@@ -317,12 +353,13 @@ export function openQuiz(game) {
     const bereich = h('div');
     m.render(h('div.ergebnis',
       h('div.zeile',
-        h('div.stat', 'Richtig', h('b', `${ersteRunde} / ${QUIZ.fragenProRunde}`)),
+        h('div.stat', 'Richtig', h('b', `${ersteRunde} / ${n}`)),
         erg.zweite ? h('div.stat', 'Zweite Chance', h('b', `+${erg.zweite}`)) : null,
         h('div.stat', 'Sterne', h('b', `+${erg.sterne} ⭐`)),
         h('div.stat', 'Gangstücke', h('b', `+${gang} 🧱`)),
       ),
       bereich,
+      rundenListe(rundenEintraege(erg.liste)),
     ));
     let offen = 0;
     const zeigePlaene = () => {
@@ -359,11 +396,48 @@ export function openQuiz(game) {
       truhe.onclick = () => { sfx.whoosh(); zeigePlaene(); };
     } else {
       ende(null);
-      bereich.prepend(h('p', { style: { fontSize: '1.05rem', lineHeight: '1.5' } }, '💪 Für eine Schatztruhe brauchst du mindestens 3 richtige Antworten. Die Sterne und Gangstücke gehören dir trotzdem!'));
+      bereich.prepend(h('p', { style: { fontSize: '1.05rem', lineHeight: '1.5' } }, `💪 Für eine Schatztruhe brauchst du mindestens ${noetig} richtige Antwort${noetig > 1 ? 'en' : ''}. Die Sterne und Gangstücke gehören dir trotzdem!`));
     }
     emit('quizEnde', { fach, erg });
   }
 
+  /** Freundliche Meldung, wenn ein Thema (oder ganzes Fach) komplett gelöst ist und es keine Zufallsaufgaben gibt. */
+  function gemeistert(fach, thema) {
+    const f = FAECHER[fach];
+    const t = thema ? themenVon(fach).find(x => x.key === thema) : null;
+    const st = thema ? themaStand(s, fach, thema) : fachStand(s, fach);
+    m._key = null;
+    m.setTitel(f.name, thema ? `${t?.name ?? ''} – gemeistert!` : 'Alles gemeistert!'); m.setFarbe(f.farbe, f.farbe2); m.setIcon('🏆');
+    sfx.fanfare(); konfetti(36);
+    const gemischtGeht = thema && rundeMoeglich(s, fach, null);
+    m.render(h('div.gemeistert-screen',
+      h('div.pokal-gross', { 'aria-hidden': 'true' }, '🏆'),
+      h('h3', thema ? `„${t?.name ?? thema}" gemeistert!` : `${f.name}: alles gemeistert!`),
+      h('p', thema
+        ? `Wow! Du hast alle ${st.gesamt} Fragen in diesem Thema richtig beantwortet. Gelöste Fragen kommen nicht wieder – hier bist du jetzt Profi! 🐜`
+        : `Unglaublich! Du hast alle ${st.gesamt} Fragen in ${f.name} gelöst. Du bist eine echte Wissens-Ameise! 🐜`),
+      h('p.klein', '🗂️ Im Fragen-Archiv kannst du dir alle Fragen und Antworten jederzeit noch einmal ansehen.'),
+      h('div.knoepfe',
+        h('button.btn.grau', { onclick: () => themenWahl(fach) }, '← Anderes Thema'),
+        gemischtGeht ? h('button.btn.blau', { onclick: () => runde(fach, null) }, '🎲 Alle Themen gemischt') : null,
+        h('button.btn', { onclick: () => openFragenArchiv(game, { fach, ausQuiz: true }) }, '🗂️ Fragen-Archiv'),
+        h('button.btn.gruen', { onclick: fachWahl }, '📚 Anderes Fach')),
+    ));
+  }
+
   fachWahl();
   return m;
+}
+
+/** Fragen der Runde für die Ergebnisliste: je Frage der letzte Stand (1. Versuch, 2. Chance). */
+function rundenEintraege(liste = []) {
+  const map = new Map();
+  for (const { q, richtig, zweite } of liste) {
+    const key = q.id;
+    const alt = map.get(key);
+    const status = richtig ? (zweite ? 'zweite' : 'geloest') : 'ueben';
+    if (!alt) map.set(key, { q, status });
+    else if (richtig) alt.status = status;
+  }
+  return [...map.values()];
 }

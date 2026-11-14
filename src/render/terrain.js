@@ -175,7 +175,9 @@ export class Terrain {
   /** Baut das Gelände-Bild neu, wenn sich die Welt verändert hat. */
   rebuild(state) {
     const world = state.world;
-    const key = world.version + ':' + state.rooms.map(r => r.id + (r.bau >= 1 ? 'f' : 'b')).join(',');
+    let fertig = 0, idSum = 0;
+    for (const r of state.rooms) { idSum += r.id; if (r.bau >= 1) fertig++; }
+    const key = world.version + ':' + state.rooms.length + ':' + fertig + ':' + idSum;
     if (key === this.version) return false;
     this.version = key;
     const ctx = this.ctx;

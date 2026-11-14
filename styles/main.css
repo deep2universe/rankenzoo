@@ -3,7 +3,7 @@
   --font: 'Fredoka', 'Nunito', 'Segoe UI', system-ui, sans-serif;
   --text: #fff7ea;
   --text-dim: #e9d6bd;
-  --panel: rgba(46, 29, 17, 0.82);
+  --panel: rgba(46, 29, 17, 0.9);
   --panel-2: rgba(70, 45, 26, 0.9);
   --line: rgba(255, 220, 170, 0.18);
   --honig: #ffc93c;
@@ -26,6 +26,9 @@ html, body {
 }
 button { font-family: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
 #welt { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; cursor: grab; }
+/* Vignette als statisches Overlay (früher pro Bild auf das Canvas gemalt) */
+body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 1;
+  background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(10,5,0,.32) 100%); }
 #welt.tool-gang, #welt.tool-bauen { cursor: crosshair; }
 #welt.tool-abriss { cursor: not-allowed; }
 #welt.dragging { cursor: grabbing; }
@@ -52,7 +55,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 .btn.gross { font-size: 1.3rem; padding: .8em 1.6em; border-radius: 20px; }
 .icon-btn {
   width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 22px;
-  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(8px);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   transition: transform .1s, background .2s;
 }
 .icon-btn:hover { background: var(--panel-2); transform: translateY(-1px); }
@@ -68,7 +71,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 .topbar > * { pointer-events: auto; }
 .kolonie-card {
   display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: var(--r);
-  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(10px);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   cursor: pointer; min-width: 0;
 }
 .kolonie-card .krone { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 26px;
@@ -78,16 +81,16 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 .res-leiste { display: flex; gap: 8px; flex-wrap: wrap; flex: 1; justify-content: center; }
 .pill {
   display: flex; align-items: center; gap: 7px; height: 44px; padding: 0 14px 0 6px; border-radius: 22px;
-  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(10px);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   font-weight: 600; font-size: 1.05rem; position: relative; cursor: help; white-space: nowrap;
 }
 .pill .ic { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; font-size: 18px; background: rgba(255,255,255,.1); }
 .pill small { color: var(--text-dim); font-weight: 500; font-size: .8rem; }
 .pill .bar { position: absolute; left: 44px; right: 14px; bottom: 5px; height: 4px; border-radius: 2px; background: rgba(255,255,255,.12); overflow: hidden; }
 .pill .bar i { display: block; height: 100%; background: linear-gradient(90deg, var(--honig), var(--honig-2)); border-radius: 2px; transition: width .4s; }
-.pill.warn { animation: warnpulse 1s infinite; }
+.pill.warn { outline: 3px solid rgba(255,107,107,.75); outline-offset: 0; animation: warnpulse 1s infinite; }
 .pill.bump { animation: bump .5s; }
-@keyframes warnpulse { 50% { box-shadow: 0 0 0 3px rgba(255,107,107,.7), var(--shadow); } }
+@keyframes warnpulse { 50% { outline-color: rgba(255,107,107,0); } }
 @keyframes bump { 30% { transform: scale(1.15); } }
 .top-tools { display: flex; gap: 8px; }
 
@@ -96,7 +99,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 .links > * { pointer-events: auto; }
 .volk-panel {
   flex: 0 1 auto; min-height: 0; overflow-y: auto;
-  border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(10px);
+  border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
   padding: 12px 14px; transition: transform .3s cubic-bezier(.3,1.4,.6,1), opacity .25s;
   scrollbar-width: thin;
 }
@@ -138,7 +141,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 .buildbar {
   position: absolute; left: 320px; right: 140px; margin: 0 auto; width: fit-content; bottom: calc(10px + var(--safe-b));
   display: flex; gap: 8px; align-items: flex-end; padding: 8px; border-radius: 22px; min-width: 0; max-width: calc(100% - 460px);
-  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); backdrop-filter: blur(10px);
+  background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow);
 }
 .buildbar .werkzeuge { display: flex; gap: 6px; padding-right: 8px; border-right: 1px solid var(--line); }
 .buildbar .karten { display: flex; gap: 6px; overflow-x: auto; min-width: 0; padding-top: 8px; scrollbar-width: thin; padding-bottom: 2px; }
@@ -167,10 +170,11 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 }
 .aktion-gross:active { transform: translateY(5px); box-shadow: 0 2px 0 rgba(0,0,0,.3), inset 0 3px 0 rgba(255,255,255,.3); }
 .aktion-gross .em { font-size: 44px; line-height: 1; filter: drop-shadow(0 3px 3px rgba(0,0,0,.3)); }
-.aktion-gross.quiz { background: radial-gradient(circle at 30% 25%, #ffe680, #ff9f1c 70%); animation: glow 2.4s infinite; }
+.aktion-gross.quiz { background: radial-gradient(circle at 30% 25%, #ffe680, #ff9f1c 70%); }
+.aktion-gross.quiz::after { content: ''; position: absolute; inset: -8px; border-radius: 38px; border: 8px solid rgba(255,201,60,.3); opacity: 0; animation: glow 2.4s infinite; pointer-events: none; }
 .aktion-gross.denk { width: 92px; height: 92px; border-radius: 26px; background: radial-gradient(circle at 30% 25%, #c7b0ff, #7b4dff 70%); font-size: .9rem; }
 .aktion-gross.denk .em { font-size: 34px; }
-@keyframes glow { 50% { box-shadow: 0 7px 0 rgba(0,0,0,.3), 0 0 0 8px rgba(255,201,60,.25), 0 14px 28px rgba(0,0,0,.35), inset 0 3px 0 rgba(255,255,255,.4); } }
+@keyframes glow { 50% { opacity: 1; } }
 .badge { position: absolute; top: -8px; right: -8px; background: var(--pink); color: #fff; font-size: .72rem; padding: 3px 8px; border-radius: 10px; font-weight: 700; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
 
 .hinweis-zeile {
@@ -198,7 +202,7 @@ button { font-family: inherit; color: inherit; cursor: pointer; border: 0; backg
 
 /* ---------- Modal ---------- */
 .modal-bg {
-  position: fixed; inset: 0; z-index: 40; background: rgba(15,8,3,.6); backdrop-filter: blur(4px); display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 40; background: rgba(15,8,3,.68); display: grid; place-items: center;
   animation: fadeIn .25s; padding: 14px;
 }
 .modal-bg.weg { animation: fadeOut .2s forwards; }

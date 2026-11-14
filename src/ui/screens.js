@@ -2,7 +2,8 @@
 import { h, fmt, fill } from '../util.js';
 import { GEBAEUDE, FAECHER } from '../game/config.js';
 import { MISSIONEN, fortschritt } from '../game/missions.js';
-import { themenVon, meisterschaft, anzahlFragen } from '../quiz/engine.js';
+import { themenVon, meisterschaft, anzahlFragen, themaStand, fachStand } from '../quiz/engine.js';
+import { archivAnsicht, closeTooltip } from './archiv.js';
 import { hasSave, saveInfo, resetSave } from '../game/state.js';
 import { openModal, confirmDialog } from './modal.js';
 import { drawAnt } from '../render/antdraw.js';
@@ -49,7 +50,7 @@ export function startScreen(onNeu, onWeiter) {
       ),
     ),
     h('div.fusszeile', '📚 Lernstoff Klasse 4 nach dem Bildungsplan Baden-Württemberg · Deutsch, Mathe, Sachunterricht, Englisch, Musik & Kunst, Sport & Miteinander',
-      h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
+      h('br'), '⇧ Shift wechselt zwischen Nest (graben & bauen) und Revier (Ameisen Befehle geben).', h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
   ));
   anim();
 }
@@ -61,7 +62,7 @@ export function missionenScreen(game) {
       const fertig = s.missionen.erledigt.includes(m.id);
       const aktuell = !fertig && MISSIONEN.find(x => !s.missionen.erledigt.includes(x.id)) === m;
       const f = fortschritt(s, m, game.d);
-      const lohn = [m.lohn.sterne && `⭐ ${m.lohn.sterne}`, m.lohn.gang && `🧱 ${m.lohn.gang}`, m.lohn.joker && `🃏 ${m.lohn.joker}`, m.lohn.plan && `${GEBAEUDE[m.lohn.plan].icon}`].filter(Boolean).join(' ');
+      const lohn = [m.lohn.sterne && `⭐ ${m.lohn.sterne}`, m.lohn.gang && `🧱 ${m.lohn.gang}`, m.lohn.joker && `🃏 ${m.lohn.joker}`, m.lohn.material && `🪵 ${m.lohn.material}`, m.lohn.plan && `${GEBAEUDE[m.lohn.plan].icon}`].filter(Boolean).join(' ');
       return h('div.mission-zeile' + (fertig ? '.fertig' : ''), { style: aktuell ? { border: '3px solid #ffc93c' } : null },
         h('div.em', fertig ? '✅' : m.icon),
         h('div', h('div.tt', m.titel), h('div.ds', fertig || aktuell ? m.text : '🔒 Wird freigeschaltet, wenn du die vorherigen Aufgaben schaffst.'),
@@ -75,15 +76,18 @@ const farbeFuer = p => (p > 0.8 ? '#2fae4a' : p > 0.55 ? '#8bc34a' : p > 0.3 ? '
 
 export function wissensbuch(game) {
   const s = game.state;
-  const m = openModal({ titel: 'Wissensbuch', unter: 'Dein Lernfortschritt & Ameisen-Lexikon', icon: '📊', klasse: 'breit', farbe: ['#43c46b', '#8be07a'] });
+  const m = openModal({ titel: 'Wissensbuch', unter: 'Dein Lernfortschritt & Ameisen-Lexikon', icon: '📊', klasse: 'breit', farbe: ['#43c46b', '#8be07a'], onClose: () => closeTooltip() });
   const tab = (name) => {
+    closeTooltip();
     tabs.querySelectorAll('button').forEach(b => b.classList.toggle('an', b.dataset.t === name));
     if (name === 'lernen') fill(inhalt, lernen());
+    else if (name === 'archiv') fill(inhalt, archivAnsicht(game, { onQuiz: typeof game.openQuiz === 'function' ? () => { m.close(); setTimeout(() => game.openQuiz(), 0); } : null }));
     else if (name === 'lexikon') fill(inhalt, lexikon());
     else fill(inhalt, statistik());
   };
   const tabs = h('div.tabs',
     h('button', { 'data-t': 'lernen', onclick: () => tab('lernen') }, '📚 Fächer & Themen'),
+    h('button', { 'data-t': 'archiv', onclick: () => tab('archiv') }, '🗂️ Fragen-Archiv'),
     h('button', { 'data-t': 'lexikon', onclick: () => tab('lexikon') }, '🐜 Ameisen-Lexikon'),
     h('button', { 'data-t': 'stat', onclick: () => tab('stat') }, '🏅 Statistik'));
   const inhalt = h('div');
@@ -93,19 +97,23 @@ export function wissensbuch(game) {
   function lernen() {
     const L = s.lernen;
     return h('div',
-      h('p', { style: { marginTop: 0, color: '#6a5038' } }, `Du hast ${fmt(L.gesamt)} Fragen beantwortet, davon ${fmt(L.richtig)} richtig (${L.gesamt ? Math.round(L.richtig / L.gesamt * 100) : 0} %). In der Bibliothek warten ${fmt(anzahlFragen())} Fragen plus unendlich viele Rechen-Aufgaben.`),
+      h('p', { style: { marginTop: 0, color: '#6a5038' } }, `Du hast ${fmt(L.gesamt)} Fragen beantwortet, davon ${fmt(L.richtig)} richtig (${L.gesamt ? Math.round(L.richtig / L.gesamt * 100) : 0} %). In der Bibliothek warten ${fmt(anzahlFragen())} Fragen plus unendlich viele Rechen-Aufgaben. Rechts steht, wie viele Fragen eines Themas du schon gelöst hast – 🏆 heißt: alle geschafft!`),
       Object.entries(FAECHER).map(([k, f]) => {
         const pf = L.proFach[k] ?? { r: 0, n: 0 };
         const mm = meisterschaft(s, k);
+        const fs = fachStand(s, k);
         return h('div.wissen-fach',
           h('div.kopf', h('span.em', f.icon), h('div', h('div.nm', f.name), h('div', { style: { fontSize: '.8rem', color: '#8a6a4a' } }, f.ort)),
-            h('div.zahlen', h('b', Math.round(mm * 100) + ' % Können'), h('br'), `${pf.r} / ${pf.n} richtig`)),
+            h('div.zahlen', h('b', Math.round(mm * 100) + ' % Können'), h('br'), `${pf.r} / ${pf.n} richtig`, h('br'),
+              h('span.geloest-info', fs.gemeistert ? `🏆 alle ${fs.gesamt} Fragen gelöst` : `📚 ${fs.geloest} / ${fs.gesamt} Fragen gelöst`))),
           themenVon(k).map(t => {
             const i = L.themen[`${k}:${t.key}`];
             const p = i ? i.m * Math.min(1, i.n / 6) : 0;
-            return h('div.thema-zeile', { title: t.bildungsplan ?? t.beschreibung ?? '' }, h('span', t.icon), h('span', t.name),
+            const st = themaStand(s, k, t.key);
+            return h('div.thema-zeile' + (st.gemeistert ? '.gemeistert' : ''), { title: (st.generator ? '' : `${st.geloest} von ${st.gesamt} Fragen gelöst · `) + (t.bildungsplan ?? t.beschreibung ?? '') },
+              h('span', st.gemeistert ? '🏆' : t.icon), h('span', t.name),
               h('div.track', h('i', { style: { width: p * 100 + '%', background: farbeFuer(p) } })),
-              h('span.q', i ? `${i.r}/${i.n}` : 'neu'));
+              h('span.q', st.generator ? (i ? `${i.r}/${i.n}` : 'neu') : `${st.geloest}/${st.gesamt}`));
           }));
       }));
   }
@@ -148,6 +156,11 @@ export function einstellungen(game) {
       schalter('musik', '🎵 Musik'),
       schalter('vorlesen', '🔊 Vorlesen erlauben', canSpeak() ? 'Fragen können vorgelesen werden (🔊-Knopf).' : 'Dein Browser unterstützt kein Vorlesen.'),
       h('div.einst-zeile', h('div', '⏱️ Spieltempo'), tempo),
+      h('div.einst-zeile', h('div', '🖥️ Grafik', h('div', { style: { fontSize: '.8rem', color: '#8a6a4a' } }, '„Sparsam" schont Akku und Lüfter (weniger Bilder pro Sekunde, geringere Auflösung).')),
+        h('div.seg', [['sparsam', 'Sparsam 🍃'], ['ausgewogen', 'Ausgewogen'], ['hoch', 'Hoch ✨']].map(([k, n]) => h('button' + ((e.grafik ?? 'ausgewogen') === k ? '.an' : ''), { onclick: ev => {
+          e.grafik = k; game.wendeGrafikAn?.(k); game.save();
+          ev.target.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('an', b === ev.target));
+        } }, n)))),
       h('div.einst-zeile', h('div', '💾 Spiel speichern', h('div', { style: { fontSize: '.8rem', color: '#8a6a4a' } }, 'Passiert auch automatisch.')),
         h('button.btn.klein.gruen', { onclick: () => { game.save(); m.close(); } }, 'Speichern')),
       h('div.einst-zeile', h('div', '🏠 Zum Startbildschirm'), h('button.btn.klein.grau', { onclick: () => { game.save(); location.reload(); } }, 'Beenden')),
@@ -156,7 +169,7 @@ export function einstellungen(game) {
           if (await confirmDialog('Wirklich löschen?', 'Dein ganzer Ameisenstaat und dein Lernfortschritt werden gelöscht.', 'Ja, löschen')) { game.stopAutosave(); resetSave(); location.reload(); }
         } }, 'Löschen')),
       h('div.wusstest', h('span.em', '👪'), h('div', h('b', 'Für Eltern & Lehrkräfte: '),
-        'Die Fragen orientieren sich am Bildungsplan 2016 (Baden-Württemberg) für die Klassen 3/4. Das Spiel wiederholt falsch beantwortete Fragen gezielt (Leitner-System) und passt die Schwierigkeit an. Der Lernstand steht im Wissensbuch 📊. Kurze Spieleinheiten (20–30 Minuten) sind ideal.')),
+        'Die Fragen orientieren sich am Bildungsplan 2016 (Baden-Württemberg) für die Klassen 3/4. Das Spiel wiederholt falsch beantwortete Fragen gezielt, bis sie gelöst sind – gelöste Fragen kommen nicht wieder und stehen im Fragen-Archiv 🗂️. Die Schwierigkeit passt sich an. Der Lernstand steht im Wissensbuch 📊. Kurze Spieleinheiten (20–30 Minuten) sind ideal.')),
     ) });
 }
 

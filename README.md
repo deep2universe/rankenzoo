@@ -18,30 +18,50 @@ Tests:
 npm test
 ```
 
-`npm test` prüft das Schema der Fragenbanken und führt einen Smoke-Test für Engine, Generatoren und Simulation aus.
+`npm test` prüft das Schema der Fragenbanken und führt Tests für Quiz-Engine, Generatoren, Simulation und die Strategie-Ebene (Revier, Forschung, Handel, alle Gebäude) aus.
 
 ## Was steckt drin?
 
+- **Zwei Ansichten, ein Spiel – Shift ⇧ wechselt:**
+  - 🏠 **Nest** (Seitenansicht): Gänge graben, Kammern bauen, das Volk versorgen.
+  - 🗺️ **Revier** (Draufsicht): die Wiese rund um den Hügel. Hier gibst du den Ameisen **Befehle**: Sammel-Trupps zu Futterquellen schicken, Wächterinnen gegen Störenfriede abstellen, **Expeditionen** in den Nebel senden, Schätze finden, mit einem Nachbarvolk handeln. Wetter und Tageszeit wirken sich aus.
+  - Der Wechsel wird mit einer Iris-Überblendung vom Ameisenhügel aus animiert; die Oberfläche wechselt ihr Farbthema.
 - **Aufbau-Strategie:**
-  - Gänge graben und 21 verschiedene Kammern bauen, zum Beispiel Kinderstube, Pilzgarten, Bäckerei, Universität, Kino, Restaurant, Buchhandlung, Kindergarten, Fußballplatz, Honigtau-Tankstelle, Möbelgeschäft und Einkaufscenter.
-  - Bestehende Gänge lassen sich durch Kammern ersetzen.
+  - 37 Gebäude, darunter Sporthalle, Eisladen, Sechs-Bein-Schuhladen, Fühler-Salon, Ameisenschule, Forschungslabor, Theater, Musikschule, Krümelkasse, Tautropfen-Bad, Wachstube, Späherturm, Spielplatz, Handelsposten, Rathaus und Duftspur-Bahnhof.
+  - Rohstoffe: Sterne ⭐, Gangstücke 🧱, Nahrung 🍯, **Baumaterial 🪵** (aus dem Revier) und **Forschungspunkte 🔬** (aus Quiz und Bildungsgebäuden).
+  - **Forschung & Entwicklung:** 20 Techniken in 5 Ästen (Landwirtschaft, Erkundung, Baukunst, Volk & Brut, Kultur & Wissen), jede mit echtem Ameisen-Fakt.
+  - **Arbeitsverteilung:** Bauarbeiterinnen je Baustelle und Ammen-Einsatz einstellbar.
   - Der Ameisenhügel wächst in 6 Stufen.
 - **Ein lebendiges Volk:**
   - Königin, Arbeiterinnen, Drohnen und Brut (Ei → Larve → Puppe).
-  - Ausgebildete Ameisen mit Berufen und Accessoires, zum Beispiel Bäckerin mit Kochmütze oder Professorin mit Doktorhut.
+  - Ausgebildete Ameisen mit Berufen und Accessoires (Kochmütze, Doktorhut, Helm, Zylinder …).
   - Sechs Bedürfnisse bestimmen die Zufriedenheit.
   - Ein Hochzeitsflug gründet neue Kolonien.
 - **Wissens-Quiz:**
-  - 1 125 kuratierte Fragen in 6 Fächergruppen: Deutsch, Mathematik, Sachunterricht, Englisch, Musik & Kunst, Sport & Miteinander.
-  - Dazu unbegrenzt viele Rechen- und Zahlenaufgaben mit Rechenweg.
-  - Die Schwierigkeit passt sich an, falsch beantwortete Fragen kommen gezielt wieder (Leitner-System).
-  - Zu jeder Antwort gibt es eine Erklärung, und alles kann vorgelesen werden.
-- **Denksport:** 6 Minispiele: Marienkäfer-Alarm, Duftspur, Memory, Farben-Wirrwarr, Zahlenjagd, Blitzblick.
+  - 1 125 kuratierte Fragen in 6 Fächergruppen, dazu unbegrenzt viele Rechen- und Zahlenaufgaben mit Rechenweg.
+  - **Gelöste Fragen kommen nicht wieder.** Falsch beantwortete Fragen werden wiederholt, bis sie sitzen.
+  - **Fragen-Archiv 🗂️:** alle gestellten Fragen mit Status; die richtige Antwort und Erklärung zeigt eine Tooltip-Karte beim Darüberfahren, ein Klick pinnt sie fest (mit eigenem ✕).
+  - Jede richtige Antwort bringt auch Forschungspunkte.
+- **Denksport:** 10 Minispiele: Marienkäfer-Alarm (mit Zifferntasten 1–9), Duftspur, Memory, Farben-Wirrwarr, Zahlenjagd, Blitzblick, Futter-Waage, Pfadfinderin, Kammer-Inventur, Sortier-Ameise.
 - **Grafik und Ton:**
-  - Alles wird prozedural gezeichnet, mit Tag-/Nachtwechsel und animierten Kammern.
-  - Die Ameisen laufen wirklich durch die Gänge.
+  - Alles wird prozedural gezeichnet, mit Tag-/Nachtwechsel, Wetter und animierten Kammern.
+  - Die Ameisen laufen wirklich durch die Gänge und über die Duftstraßen im Revier.
   - Klänge, Musik und Vorlesen erzeugt der Browser selbst.
-- **Kindgerecht:** keine Käufe, keine Ranglisten und keine Strafen fürs Pausieren. Nach 25 Minuten erinnert das Spiel an eine Bewegungspause. Der Spielstand wird nur lokal im Browser gespeichert.
+- **Sparsam mit Akku und Lüfter:** Sprite-Caches, ein zwischengespeichertes Geländebild, adaptive Bildrate (flüssig beim Scrollen, gemächlich im Ruhezustand, fast still hinter Fenstern) und eine Grafik-Einstellung (Sparsam / Ausgewogen / Hoch).
+- **Kindgerecht:** keine Käufe, keine Ranglisten, niemand stirbt (Störenfriede werden nur verscheucht). Nach 25 Minuten erinnert das Spiel an eine Bewegungspause. Der Spielstand wird nur lokal im Browser gespeichert.
+
+## Bedienung
+
+| Taste | Nest | Revier |
+|---|---|---|
+| ⇧ Shift | ins Revier | ins Nest |
+| Q / M | Quiz / Denksport | Quiz / Denksport |
+| F | Forschung | Forschung |
+| G / X | Gang graben / Abriss | – |
+| E | – | Expedition: Ziel wählen |
+| WASD, Pfeile, Mausrad | Ansicht verschieben / zoomen | Ansicht verschieben / zoomen |
+| H | zur Königin | zum Hügel |
+| 1–9 | Quiz-Antworten, Marienkäfer-Löcher | |
 
 ## Projektstruktur
 
@@ -49,12 +69,13 @@ npm test
 index.html                 Einstieg
 styles/main.css            Gestaltung
 src/main.js                Spielsteuerung & Hauptschleife
-src/game/                  Konfiguration, Welt/Gitter, Simulation, Aktionen, Aufgaben, Spielstand
-src/render/                Canvas-Renderer: Gelände, Kammern, Ameisen, Himmel
-src/ui/                    Oberfläche: HUD, Quiz, Minispiele, Fenster
+src/game/                  Konfiguration, Welt/Gitter, Simulation, Aktionen, Aufgaben, Spielstand,
+                           Revier (revier.js), Forschung (forschung.js)
+src/render/                Canvas-Renderer: Gelände, Kammern, Ameisen, Himmel, Revier-Karte, Sprite-Caches
+src/ui/                    Oberfläche: HUD, Quiz, Minispiele, Fenster, Revier, Forschung, Archiv, Tooltip
 src/quiz/                  Quiz-Engine (adaptiv, Leitner) & Aufgaben-Generatoren
 src/data/questions/        Fragenbanken je Fach (+ SCHEMA.md)
-tools/                     Server, Validator, Smoke-Test
+tools/                     Server, Validator, Smoke-Test, Strategie-Test
 _agent_doc/                Recherche zum Lehrplan & Spieldesign
 ```
 

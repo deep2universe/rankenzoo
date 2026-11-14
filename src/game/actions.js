@@ -6,6 +6,7 @@ import { refreshConnectivity } from './sim.js';
 import { C } from './config.js';
 import { emit } from '../events.js';
 import { pick, shuffle } from '../util.js';
+import { hatTech } from './forschung.js';
 
 export function digCell(state, x, y, extra) {
   if (state.res.gang <= 0) return { ok: false, grund: 'Keine Gangstücke mehr! Verdiene neue im Quiz.' };
@@ -23,9 +24,11 @@ export function placeBuilding(state, typ, x, y) {
   const g = GEBAEUDE[typ];
   if (!state.plaene[typ]) return { ok: false, grund: 'Dafür brauchst du einen Bauplan – gewinne ihn im Quiz!' };
   if (state.res.sterne < g.kosten) return { ok: false, grund: `Du brauchst ${g.kosten} ⭐ (du hast ${Math.floor(state.res.sterne)}).` };
+  if (g.material && (state.res.material ?? 0) < g.material) return { ok: false, grund: `Du brauchst ${g.material} 🪵 Baumaterial – schicke Sammlerinnen ins Revier (Shift)!` };
   const r = canPlace(state.world, state.rooms, typ, x, y);
   if (!r.ok) return r;
   state.res.sterne -= g.kosten;
+  if (g.material) state.res.material -= g.material;
   state.plaene[typ]--;
   if (!state.plaene[typ]) delete state.plaene[typ];
   const room = addRoom(state, typ, x, y, false);
@@ -51,6 +54,7 @@ export function demolishAt(state, x, y) {
     state.plaene[room.typ] = (state.plaene[room.typ] ?? 0) + 1;
     // Sterne: bei fertigen Gebäuden die Hälfte zurück, bei Baustellen alles
     state.res.sterne += room.bau >= 1 ? Math.floor(g.kosten / 2) : g.kosten;
+    if (g.material) state.res.material = (state.res.material ?? 0) + (room.bau >= 1 ? Math.floor(g.material / 2) : g.material);
     state.res.gang = Math.max(0, state.res.gang - (room.ersetzt?.length ?? 0));
     refreshConnectivity(state);
     emit('abgerissen', room);
@@ -73,8 +77,10 @@ export function upgradeHill(state, pop) {
   if (pop < k.pop) return { ok: false, grund: `Dafür brauchst du ${k.pop} Ameisen.` };
   if (state.res.sterne < k.sterne) return { ok: false, grund: `Du brauchst ${k.sterne} ⭐.` };
   if (state.res.gang < k.gang) return { ok: false, grund: `Du brauchst ${k.gang} Gangstücke.` };
+  if ((state.res.material ?? 0) < k.material) return { ok: false, grund: `Du brauchst ${k.material} 🪵 Baumaterial (Revier: Zweige & Harz sammeln).` };
   state.res.sterne -= k.sterne;
   state.res.gang -= k.gang;
+  state.res.material -= k.material;
   setHill(state.world, lvl + 1);
   refreshConnectivity(state);
   emit('huegel', lvl + 1);
@@ -101,6 +107,8 @@ export function verfuegbarePlaene(state, rangOverride) {
   const rang = rangOverride ?? rangVon(pop);
   return Object.entries(GEBAEUDE)
     .filter(([k, g]) => k !== 'koenigin' && g.stufe <= rang)
+    .filter(([, g]) => !g.forschung || hatTech(state, g.forschung))
+    .filter(([k]) => k !== 'handel' || hatTech(state, 'diplomatie') || rang >= 3)
     .filter(([k, g]) => !(g.einzigartig && (state.rooms.some(r => r.typ === k) || state.plaene[k])))
     .map(([k]) => k);
 }
@@ -123,4 +131,21 @@ export function planAuswahl(state, fach, anzahl = 3) {
 export function grantPlan(state, typ, n = 1) {
   state.plaene[typ] = (state.plaene[typ] ?? 0) + n;
   emit('plan', typ);
+}
+
+/** Architektur-Forschung: Bauplan einer schon gebauten Kammer kopieren. */
+export function planKopieKosten(typ) {
+  const g = GEBAEUDE[typ];
+  return { material: 15 + Math.round(g.kosten * 0.5), sterne: Math.round(g.kosten * 0.5) };
+}
+export function kopierePlan(state, typ) {
+  const g = GEBAEUDE[typ];
+  if (!g || g.einzigartig || typ === 'koenigin') return { ok: false, grund: 'Diesen Plan kann man nicht kopieren.' };
+  if (!hatTech(state, 'architektur')) return { ok: false, grund: 'Erforsche zuerst „Architektur".' };
+  if (!state.rooms.some(r => r.typ === typ && r.bau >= 1)) return { ok: false, grund: 'Nur Kammern, die du schon gebaut hast.' };
+  const k = planKopieKosten(typ);
+  if ((state.res.material ?? 0) < k.material || state.res.sterne < k.sterne) return { ok: false, grund: `Kosten: ${k.material} 🪵 und ${k.sterne} ⭐.` };
+  state.res.material -= k.material; state.res.sterne -= k.sterne;
+  grantPlan(state, typ);
+  return { ok: true };
 }

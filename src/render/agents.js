@@ -2,7 +2,7 @@
 import { TILE as T, COLS, GROUND, C, GEBAEUDE } from '../game/config.js';
 import { findPath, walkable, get, idx, isSurfaceWalk } from '../game/world.js';
 import { hillSurfaceY } from './terrain.js';
-import { drawAnt } from './antdraw.js';
+import { drawAntFast as drawAnt, drawEmoji } from './sprites.js';
 import { pick, rand, randInt } from '../util.js';
 
 const MAX_SICHTBAR = 90;
@@ -35,10 +35,16 @@ export class Agents {
   roomAt(state, cx, cy) {
     const id = state.world.raum[idx(cx, cy)];
     if (id < 0) return null;
-    const r = state.rooms.find(rr => rr.id === id);
-    if (!r) return null;
-    const g = GEBAEUDE[r.typ];
-    return { ...r, w: g.w, h: g.h, zone: g.zone };
+    // Raum-Infos zwischenspeichern (wird pro Ameise und Bild mehrfach gebraucht)
+    if (this._roomsRef !== state.rooms || this._roomsLen !== state.rooms.length) {
+      this._roomsRef = state.rooms; this._roomsLen = state.rooms.length;
+      this._roomInfo = new Map();
+      for (const r of state.rooms) {
+        const g = GEBAEUDE[r.typ];
+        this._roomInfo.set(r.id, { id: r.id, typ: r.typ, x: r.x, y: r.y, w: g.w, h: g.h, zone: g.zone });
+      }
+    }
+    return this._roomInfo.get(id) ?? null;
   }
 
   /** Gewünschte Zusammensetzung aus der Simulation ableiten und Ameisen ergänzen/entfernen. */
@@ -58,7 +64,7 @@ export class Agents {
     for (const [rid, n] of d.bauProStelle) for (let i = 0; i < Math.min(3, n); i++) want.push({ job: 'bau', roomId: rid });
     const ammen = Math.min(8, Math.round(d.jobs.ammen * scale));
     for (let i = 0; i < ammen; i++) want.push({ job: 'amme', acc: 'haube' });
-    const sammler = Math.min(40, Math.round(d.jobs.sammler * scale));
+    const sammler = Math.min(40, Math.round((d.jobs.sammler + (d.jobs.revier ?? 0)) * scale));
     for (let i = 0; i < sammler; i++) want.push({ job: 'sammler' });
     const drohnen = Math.min(12, v.drohnen);
     for (let i = 0; i < drohnen; i++) want.push({ job: 'drohne', rolle: 'drohne' });
@@ -209,8 +215,9 @@ export class Agents {
         this.arrive(a, state);
         continue;
       }
-      const [x0, y0] = this.cellPos(state, p[a.pi][0], p[a.pi][1]);
-      const [x1, y1] = this.cellPos(state, p[a.pi + 1][0], p[a.pi + 1][1]);
+      if (!a.px || a.pxFor !== p) { a.px = p.map(([cx, cy]) => this.cellPos(state, cx, cy)); a.pxFor = p; }
+      const [x0, y0] = a.px[a.pi];
+      const [x1, y1] = a.px[a.pi + 1];
       const len = Math.hypot(x1 - x0, y1 - y0) || 1;
       a.seg += (dt * a.speed * tempo) / len;
       a.phase += dt * a.speed * tempo * 0.45;
@@ -254,13 +261,7 @@ export class Agents {
         wings: a.rolle === 'drohne',
       });
       if (a.pop > 0) {
-        ctx.save();
-        ctx.globalAlpha = a.pop;
-        ctx.fillStyle = '#ffd34d';
-        ctx.font = 'bold 10px Fredoka, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('+🍯', a.x, a.y - 16 - (1 - a.pop) * 14);
-        ctx.restore();
+        drawEmoji(ctx, '🍯', a.x, a.y - 16 - (1 - a.pop) * 14, 10, a.pop);
       }
     }
     for (const f of this.flieger) {

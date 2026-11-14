@@ -255,6 +255,20 @@ function drawAcc(ctx, acc, hx, hy, hr, L) {
       ctx.fillStyle = '#ff9cc8'; ctx.beginPath(); ctx.arc(bx, by, hr * 0.16, 0, 7); ctx.fill();
       break;
     }
+    case 'helm': {
+      ctx.fillStyle = '#9aa8c0'; ctx.strokeStyle = '#5a6880';
+      ctx.beginPath(); ctx.arc(hx, top + hr * 0.35, hr * 0.78, Math.PI, 0); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#e8463c'; ctx.fillRect(hx - hr * 0.12, top - hr * 0.62, hr * 0.24, hr * 0.45);
+      ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.beginPath(); ctx.arc(hx - hr * 0.3, top + hr * 0.05, hr * 0.15, 0, 7); ctx.fill();
+      break;
+    }
+    case 'zylinder': {
+      ctx.fillStyle = '#1e1a24';
+      ell(ctx, hx, top + hr * 0.1, hr * 0.95, hr * 0.18); ctx.fill();
+      ctx.fillRect(hx - hr * 0.55, top - hr * 0.95, hr * 1.1, hr * 1.05);
+      ctx.fillStyle = '#d63a52'; ctx.fillRect(hx - hr * 0.55, top - hr * 0.2, hr * 1.1, hr * 0.22);
+      break;
+    }
     case 'kiste': {
       ctx.fillStyle = '#c98b4a'; ctx.strokeStyle = '#7d5124';
       ctx.fillRect(-0.12 * L, -0.3 * L, 0.24 * L, 0.18 * L);
