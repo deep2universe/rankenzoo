@@ -1,8 +1,8 @@
 // Revier-Ansicht: die Wiese rund um den Hügel in Draufsicht – Kommandokarte der Königin.
 // Boden und Nebel werden vorgerendert; pro Bild kommen nur Duftstraßen, Ameisen,
 // Quellen, Expeditionen und Wetter dazu.
-import { REVIER, QUELLEN, STOERER, GEBAEUDE } from '../game/config.js';
-import { NEST, sichtbar, distNest } from '../game/revier.js';
+import { REVIER, QUELLEN, STOERER, GEBAEUDE, FUNDE } from '../game/config.js';
+import { NEST, sichtbar, distNest, naechsteBasis, lagerPlatz } from '../game/revier.js';
 import { hatFreischaltung } from '../game/forschung.js';
 import { makeNoise, mulberry32, clamp } from '../util.js';
 import { drawEmoji, drawGlow, cached } from './sprites.js';
@@ -47,7 +47,7 @@ function drawAntTop(ctx, x, y, ang, frame, last) {
   ctx.drawImage(antSprite(frame, last), -ANT_L * 0.65, -ANT_L * 0.5, ANT_L * 1.4, ANT_L);
   ctx.restore();
 }
-const LADUNG = { nahrung: '#ffcf40', material: '#a8743f', sterne: '#9ff0ff', tau: '#8fd3ff' };
+const LADUNG = { nahrung: '#ffcf40', material: '#a8743f', sterne: '#9ff0ff', tau: '#8fd3ff', pollen: '#ffb02e' };
 
 // Quellen-Kunst (von oben), einmal gemalt
 function quelleKunst(typ) {
@@ -122,8 +122,118 @@ function quelleKunst(typ) {
         c.strokeStyle = '#b8231f'; c.lineWidth = 5; c.lineCap = 'round';
         c.beginPath(); c.moveTo(-10, -10); c.lineTo(10, 10); c.moveTo(10, -10); c.lineTo(-10, 10); c.stroke();
         break;
+      case 'blumen': {
+        blob(T * 0.6, '#4f9a3a', 12, 0.3);
+        const cols = ['#ff6b9b', '#ffd34d', '#ffffff', '#b07cff', '#ff9f43', '#5fb4ff'];
+        for (let i = 0; i < 16; i++) {
+          const a = rnd() * 7, r = rnd() * T * 0.5, x = Math.cos(a) * r, y = Math.sin(a) * r, s = 3.2 + rnd() * 2.6, col = cols[i % cols.length];
+          for (let k = 0; k < 5; k++) { const b = k * 1.256 + i; c.fillStyle = col; c.beginPath(); c.ellipse(x + Math.cos(b) * s * 0.8, y + Math.sin(b) * s * 0.8, s * 0.62, s * 0.4, b, 0, 7); c.fill(); }
+          c.fillStyle = '#ffb02e'; c.beginPath(); c.arc(x, y, s * 0.45, 0, 7); c.fill();
+          c.fillStyle = 'rgba(255,250,200,.9)'; c.beginPath(); c.arc(x - 0.6, y - 0.6, s * 0.18, 0, 7); c.fill();
+        }
+        break;
+      }
+      case 'loewenzahn':
+        blob(T * 0.58, '#4a8f34', 10, 0.3);
+        for (let i = 0; i < 8; i++) { c.save(); c.rotate(i * 0.8); c.fillStyle = '#3d7d2a'; c.beginPath(); c.ellipse(T * 0.38, 0, T * 0.24, 5, 0, 0, 7); c.fill(); c.restore(); }
+        for (const [dx, dy, s] of [[-12, -6, 1], [10, 4, 0.85], [-2, 14, 0.75], [8, -14, 0.7]]) {
+          c.save(); c.translate(dx, dy); c.scale(s, s);
+          for (let k = 0; k < 22; k++) { c.save(); c.rotate(k / 22 * Math.PI * 2); c.fillStyle = k % 2 ? '#ffd21f' : '#ffc000'; c.beginPath(); c.ellipse(7, 0, 6, 1.8, 0, 0, 7); c.fill(); c.restore(); }
+          c.fillStyle = '#ffb000'; c.beginPath(); c.arc(0, 0, 4.5, 0, 7); c.fill();
+          c.restore();
+        }
+        // Pusteblume
+        c.strokeStyle = 'rgba(255,255,255,.85)'; c.lineWidth = 0.8;
+        for (let k = 0; k < 18; k++) { const a = k / 18 * Math.PI * 2; c.beginPath(); c.moveTo(16, 14); c.lineTo(16 + Math.cos(a) * 8, 14 + Math.sin(a) * 8); c.stroke(); }
+        c.fillStyle = '#e8e2c8'; c.beginPath(); c.arc(16, 14, 2, 0, 7); c.fill();
+        break;
+      case 'klee':
+        for (let i = 0; i < 14; i++) {
+          const a = rnd() * 7, r = rnd() * T * 0.5, x = Math.cos(a) * r, y = Math.sin(a) * r;
+          for (let k = 0; k < 3; k++) { const b = k * 2.094 + a; c.fillStyle = k % 2 ? '#3f9a3a' : '#4fb04a'; c.beginPath(); c.arc(x + Math.cos(b) * 3.4, y + Math.sin(b) * 3.4, 3.6, 0, 7); c.fill(); }
+        }
+        for (let i = 0; i < 6; i++) {
+          const a = rnd() * 7, r = rnd() * T * 0.4, x = Math.cos(a) * r, y = Math.sin(a) * r;
+          for (let k = 0; k < 10; k++) { const b = k * 0.628; c.fillStyle = i % 2 ? '#f6c8e0' : '#ffffff'; c.beginPath(); c.ellipse(x + Math.cos(b) * 3, y + Math.sin(b) * 3, 2.2, 1.2, b, 0, 7); c.fill(); }
+          c.fillStyle = '#e88ab8'; c.beginPath(); c.arc(x, y, 1.6, 0, 7); c.fill();
+        }
+        break;
+      case 'pilzring':
+        blob(T * 0.55, 'rgba(60,110,40,.55)', 12, 0.2);
+        for (let i = 0; i < 9; i++) {
+          const a = i / 9 * Math.PI * 2, x = Math.cos(a) * T * 0.4, y = Math.sin(a) * T * 0.4, s = 5 + rnd() * 3;
+          c.fillStyle = '#f2e6cf'; c.beginPath(); c.arc(x + 1, y + 2, s * 0.45, 0, 7); c.fill();
+          const g = c.createRadialGradient(x - s * 0.3, y - s * 0.3, 1, x, y, s);
+          g.addColorStop(0, i % 3 ? '#e8423c' : '#c98a4a'); g.addColorStop(1, i % 3 ? '#a8201c' : '#7a4a22');
+          c.fillStyle = g; c.beginPath(); c.arc(x, y, s, 0, 7); c.fill();
+          if (i % 3) { c.fillStyle = '#fff'; for (let k = 0; k < 3; k++) { c.beginPath(); c.arc(x + (rnd() - 0.5) * s, y + (rnd() - 0.5) * s, 1, 0, 7); c.fill(); } }
+        }
+        break;
+      case 'eichel': {
+        c.fillStyle = 'rgba(10,40,10,.3)'; c.beginPath(); c.arc(6, 8, T * 0.72, 0, 7); c.fill();
+        for (let k = 0; k < 10; k++) {
+          const a = rnd() * 7, rr = rnd() * T * 0.42, sz = T * (0.3 + rnd() * 0.22);
+          const g = c.createRadialGradient(Math.cos(a) * rr - sz * 0.3, Math.sin(a) * rr - sz * 0.4, sz * 0.1, Math.cos(a) * rr, Math.sin(a) * rr, sz);
+          g.addColorStop(0, ['#6aa84a', '#5a9a3c', '#78b852'][k % 3]); g.addColorStop(1, '#2a5a1c');
+          c.fillStyle = g; c.beginPath(); c.arc(Math.cos(a) * rr, Math.sin(a) * rr, sz, 0, 7); c.fill();
+        }
+        for (let i = 0; i < 5; i++) { const a = rnd() * 7, r = T * (0.3 + rnd() * 0.3); const x = Math.cos(a) * r, y = Math.sin(a) * r; c.fillStyle = '#b07a3a'; c.beginPath(); c.ellipse(x, y + 1.5, 2.6, 3.4, 0, 0, 7); c.fill(); c.fillStyle = '#6a4220'; c.beginPath(); c.ellipse(x, y - 1.4, 3, 1.8, 0, 0, 7); c.fill(); }
+        break;
+      }
+      case 'fund':
+        c.fillStyle = 'rgba(255,240,170,.35)'; c.beginPath(); c.ellipse(0, 4, T * 0.4, T * 0.26, 0, 0, 7); c.fill();
+        c.strokeStyle = 'rgba(120,90,40,.45)'; c.lineWidth = 1;
+        for (let i = 0; i < 10; i++) { const a = rnd() * 7, r = T * (0.2 + rnd() * 0.25); c.beginPath(); c.moveTo(Math.cos(a) * r, 4 + Math.sin(a) * r * 0.6); c.lineTo(Math.cos(a) * (r + 5), 4 + Math.sin(a) * (r + 5) * 0.6); c.stroke(); }
+        break;
     }
   });
+}
+
+/**
+ * Revier-Lager von oben: Zelt (1), Basislager (2), Außenposten (3). (x,y) = Mitte, s = Skalierung.
+ * Wird auch für die Bauplan-Vorschau benutzt.
+ */
+export function zeichneLager(c, x, y, stufe, t = 0, s = 1) {
+  c.save(); c.translate(x, y); c.scale(s, s);
+  c.fillStyle = 'rgba(0,0,0,.22)'; c.beginPath(); c.ellipse(4, 7, 26, 15, 0, 0, 7); c.fill();
+  // festgetretener Platz
+  c.fillStyle = '#b89462'; c.beginPath(); c.ellipse(0, 4, 24, 15, 0, 0, 7); c.fill();
+  c.fillStyle = 'rgba(255,240,200,.25)'; c.beginPath(); c.ellipse(-4, 1, 16, 8, 0, 0, 7); c.fill();
+  const zelt = (zx, zy, k, farbe, farbe2) => {
+    c.save(); c.translate(zx, zy); c.scale(k, k);
+    c.fillStyle = farbe2; c.beginPath(); c.moveTo(-14, 8); c.lineTo(0, -14); c.lineTo(0, 10); c.closePath(); c.fill();
+    c.fillStyle = farbe; c.beginPath(); c.moveTo(14, 8); c.lineTo(0, -14); c.lineTo(0, 10); c.closePath(); c.fill();
+    c.fillStyle = '#4a2a14'; c.beginPath(); c.moveTo(-3, 9); c.lineTo(0, -2); c.lineTo(3, 9); c.closePath(); c.fill();
+    c.strokeStyle = 'rgba(255,255,255,.5)'; c.lineWidth = 1; c.beginPath(); c.moveTo(0, -14); c.lineTo(0, 10); c.stroke();
+    c.restore();
+  };
+  if (stufe >= 2) {
+    // Lagerfeuer mit Steinen
+    for (let i = 0; i < 7; i++) { const a = i / 7 * Math.PI * 2; c.fillStyle = '#8d8a84'; c.beginPath(); c.arc(-12 + Math.cos(a) * 5, 9 + Math.sin(a) * 3.2, 1.8, 0, 7); c.fill(); }
+    const fl = 0.75 + Math.sin(t * 9) * 0.15 + Math.sin(t * 13) * 0.1;
+    c.fillStyle = `rgba(255,150,40,${fl})`; c.beginPath(); c.ellipse(-12, 7, 3.2, 4.5 * fl, 0, 0, 7); c.fill();
+    c.fillStyle = `rgba(255,230,120,${fl})`; c.beginPath(); c.ellipse(-12, 8, 1.6, 2.4 * fl, 0, 0, 7); c.fill();
+    // Vorratskiste
+    c.fillStyle = '#9a6a3c'; c.fillRect(11, 6, 9, 7); c.strokeStyle = '#5e3a1e'; c.strokeRect(11, 6, 9, 7);
+    zelt(-6, -2, 0.85, '#ff9f43', '#e07a1f');
+    zelt(9, -5, 0.75, '#4fb4ff', '#2f8fd8');
+  } else {
+    zelt(0, -1, 1, '#ff9f43', '#e07a1f');
+  }
+  if (stufe >= 3) {
+    // Turm mit Fahne
+    c.fillStyle = '#7a4a22'; c.fillRect(16, -26, 4, 30); c.fillRect(24, -26, 4, 30);
+    c.strokeStyle = '#7a4a22'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(18, -16); c.lineTo(26, -6); c.moveTo(26, -16); c.lineTo(18, -6); c.stroke();
+    c.fillStyle = '#c08040'; c.fillRect(13, -30, 18, 5);
+    c.strokeStyle = '#ddd'; c.lineWidth = 1.2; c.beginPath(); c.moveTo(22, -30); c.lineTo(22, -46); c.stroke();
+    const w = Math.sin(t * 3) * 2;
+    c.fillStyle = '#e8323c'; c.beginPath(); c.moveTo(22, -46); c.quadraticCurveTo(28, -44 + w, 34, -43); c.lineTo(22, -38); c.fill();
+  } else {
+    // Wimpel am Zelt
+    c.strokeStyle = '#ddd'; c.lineWidth = 1; c.beginPath(); c.moveTo(stufe >= 2 ? -6 : 0, stufe >= 2 ? -14 : -15); c.lineTo(stufe >= 2 ? -6 : 0, -24); c.stroke();
+    c.fillStyle = '#ffd34d'; c.beginPath(); c.moveTo(stufe >= 2 ? -6 : 0, -24); c.lineTo((stufe >= 2 ? -6 : 0) + 8 + Math.sin(t * 3), -21); c.lineTo(stufe >= 2 ? -6 : 0, -18); c.fill();
+  }
+  c.restore();
 }
 
 export class RevierRenderer {
@@ -176,12 +286,23 @@ export class RevierRenderer {
   cellAt(sx, sy) { const [wx, wy] = this.screenToWorld(sx, sy); return [Math.floor(wx / T), Math.floor(wy / T)]; }
   nestScreen() { return this.worldToScreen(NX, NY); }
 
+  /** Lager unter dem Mauszeiger */
+  lagerAt(sx, sy) {
+    const [wx, wy] = this.screenToWorld(sx, sy);
+    let best = null, bd = T * 0.8;
+    for (const l of this.state.revier.lager ?? []) {
+      const d = Math.hypot((l.x + 0.5) * T - wx, (l.y + 0.5) * T - wy);
+      if (d < bd) { bd = d; best = l; }
+    }
+    return best;
+  }
+
   /** Quelle unter dem Mauszeiger (nur entdeckte) */
   quelleAt(sx, sy) {
     const [wx, wy] = this.screenToWorld(sx, sy);
     let best = null, bd = T * 0.9;
     for (const q of this.state.revier.quellen) {
-      if (!q.entdeckt || (q.typ === 'schatz' && q.menge <= 0)) continue;
+      if (!q.entdeckt || ((q.typ === 'schatz' || q.typ === 'fund') && q.menge <= 0)) continue;
       const d = Math.hypot((q.x + 0.5) * T - wx, (q.y + 0.5) * T - wy);
       if (d < bd) { bd = d; best = q; }
     }
@@ -229,24 +350,25 @@ export class RevierRenderer {
     for (let i = 0; i < 6; i++) { const a = rnd() * 7, r = rnd() * 70; c.fillStyle = '#3f9a3a'; c.beginPath(); c.arc(tx + Math.cos(a) * r * 1.2, ty + Math.sin(a) * r * 0.7, 9 + rnd() * 6, 0.4, Math.PI * 2 - 0.2); c.lineTo(tx + Math.cos(a) * r * 1.2, ty + Math.sin(a) * r * 0.7); c.fill(); }
     c.fillStyle = '#ff8fb1'; c.beginPath(); c.arc(tx + 30, ty - 12, 5, 0, 7); c.fill();
     // Grashalme & Klee
-    for (let i = 0; i < 9000; i++) {
+    const fl = (MW * MH) / (44 * 30 * 48 * 48);
+    for (let i = 0; i < 9000 * fl; i++) {
       const x = rnd() * MW, y = rnd() * MH, a = rnd() * Math.PI * 2, l = 2 + rnd() * 5;
       c.strokeStyle = rnd() < 0.5 ? 'rgba(40,100,30,.35)' : 'rgba(170,230,120,.3)'; c.lineWidth = 1;
       c.beginPath(); c.moveTo(x, y); c.lineTo(x + Math.cos(a) * l, y + Math.sin(a) * l); c.stroke();
     }
-    for (let i = 0; i < 70; i++) {
+    for (let i = 0; i < 70 * fl; i++) {
       const x = rnd() * MW, y = rnd() * MH;
       for (let k = 0; k < 3; k++) { c.fillStyle = 'rgba(60,140,50,.6)'; c.beginPath(); c.arc(x + Math.cos(k * 2.1) * 4, y + Math.sin(k * 2.1) * 4, 4, 0, 7); c.fill(); }
     }
     // Blumen
     const blumen = ['#ff6b8b', '#ffd34d', '#ffffff', '#b07cff', '#5fb4ff', '#ff9f43'];
-    for (let i = 0; i < 260; i++) {
+    for (let i = 0; i < 260 * fl; i++) {
       const x = rnd() * MW, y = rnd() * MH, col = blumen[(rnd() * blumen.length) | 0], s = 2 + rnd() * 2.2;
       for (let k = 0; k < 5; k++) { const a = k * 1.256; c.fillStyle = col; c.beginPath(); c.arc(x + Math.cos(a) * s, y + Math.sin(a) * s, s * 0.8, 0, 7); c.fill(); }
       c.fillStyle = '#ffe680'; c.beginPath(); c.arc(x, y, s * 0.6, 0, 7); c.fill();
     }
     // Steine
-    for (let i = 0; i < 26; i++) {
+    for (let i = 0; i < 26 * fl; i++) {
       const x = rnd() * MW, y = rnd() * MH, r = 6 + rnd() * 16;
       if (Math.hypot(x - NX, y - NY) < 200) continue;
       c.fillStyle = 'rgba(0,0,0,.2)'; c.beginPath(); c.ellipse(x + 4, y + 5, r, r * 0.8, 0, 0, 7); c.fill();
@@ -264,7 +386,23 @@ export class RevierRenderer {
         c.fillStyle = g; c.beginPath(); c.arc(x + Math.cos(a) * rr, y + Math.sin(a) * rr, s, 0, 7); c.fill();
       }
     };
-    for (let i = 0; i < 16; i++) {
+    // zweiter Teich & Bach im großen Revier
+    const t2x = MW * 0.8, t2y = MH * 0.22;
+    const teich2 = new Path2D();
+    for (let i = 0; i <= 24; i++) { const a = (i / 24) * Math.PI * 2, r = 70 + Math.sin(i * 2.3) * 12; teich2.lineTo(t2x + Math.cos(a) * r * 1.4, t2y + Math.sin(a) * r * 0.8); }
+    teich2.closePath();
+    c.fillStyle = '#8a7a50'; c.save(); c.translate(0, 5); c.fill(teich2); c.restore();
+    const tg2 = c.createRadialGradient(t2x - 15, t2y - 15, 8, t2x, t2y, 110);
+    tg2.addColorStop(0, '#86d3f4'); tg2.addColorStop(0.6, '#3d8fc8'); tg2.addColorStop(1, '#2a6a9a');
+    c.fillStyle = tg2; c.fill(teich2);
+    c.strokeStyle = 'rgba(255,255,255,.35)'; c.lineWidth = 3; c.stroke(teich2);
+    const bach = new Path2D();
+    bach.moveTo(t2x - 90, t2y + 40);
+    bach.bezierCurveTo(MW * 0.7, MH * 0.4, MW * 0.92, MH * 0.55, MW * 0.86, MH + 30);
+    c.strokeStyle = 'rgba(90,70,40,.35)'; c.lineWidth = 26; c.stroke(bach);
+    c.strokeStyle = '#4f9fd6'; c.lineWidth = 18; c.stroke(bach);
+    c.strokeStyle = 'rgba(220,245,255,.45)'; c.lineWidth = 4; c.setLineDash([14, 18]); c.stroke(bach); c.setLineDash([]);
+    for (let i = 0; i < 16 * Math.max(1, fl * 0.8); i++) {
       const seite = i % 4, u = rnd();
       const x = seite === 0 ? u * MW : seite === 1 ? MW + 20 - rnd() * 60 : seite === 2 ? u * MW : -20 + rnd() * 60;
       const y = seite === 0 ? -20 + rnd() * 60 : seite === 1 ? u * MH : seite === 2 ? MH + 20 - rnd() * 60 : u * MH;
@@ -380,13 +518,42 @@ export class RevierRenderer {
       drawEmoji(ctx, GEBAEUDE[rr.typ].icon, NX + Math.cos(a) * R, NY + Math.sin(a) * R + 7, 18);
     });
 
-    // Duftstraßen & Sammel-Trupps
+    // Lager (Zelte) mit Pfad zum Hügel
+    for (const l of r.lager ?? []) {
+      const lx = (l.x + 0.5) * T, ly = (l.y + 0.5) * T;
+      ctx.strokeStyle = 'rgba(214,180,120,.35)'; ctx.lineWidth = 7; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(NX, NY); ctx.lineTo(lx, ly); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,240,200,.5)'; ctx.lineWidth = 1.5; ctx.setLineDash([2, 8]);
+      ctx.beginPath(); ctx.moveTo(NX, NY); ctx.lineTo(lx, ly); ctx.stroke(); ctx.setLineDash([]);
+    }
+    for (const l of r.lager ?? []) {
+      const lx = (l.x + 0.5) * T, ly = (l.y + 0.5) * T;
+      if (!inView(lx, ly)) continue;
+      if (this.lagerSel === l.id) {
+        ctx.strokeStyle = `rgba(255,236,140,${0.65 + 0.35 * Math.sin(t * 4)})`; ctx.lineWidth = 3; ctx.setLineDash([7, 5]); ctx.lineDashOffset = -t * 10;
+        ctx.beginPath(); ctx.arc(lx, ly, T * 0.9, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (l.bau < 1) {
+        ctx.globalAlpha = 0.45 + 0.4 * l.bau; zeichneLager(ctx, lx, ly, l.stufe, t, 0.9); ctx.globalAlpha = 1;
+        ctx.fillStyle = 'rgba(0,0,0,.5)'; ctx.beginPath(); ctx.roundRect(lx - 22, ly + 22, 44, 6, 3); ctx.fill();
+        ctx.fillStyle = '#ffcf3a'; ctx.beginPath(); ctx.roundRect(lx - 22, ly + 22, 44 * l.bau, 6, 3); ctx.fill();
+        // fleißige Erkunderinnen beim Aufbauen
+        for (let i = 0; i < 3; i++) { const a = t * 1.5 + i * 2.1; drawAntTop(ctx, lx + Math.cos(a) * 20, ly + Math.sin(a) * 13, a + Math.PI / 2, Math.floor(t * 10 + i) % 4, '#a8743f'); }
+      } else {
+        drawGlow(ctx, '255,200,120', lx, ly, 40, 0.18 + (d.istNacht ? 0.25 : 0));
+        zeichneLager(ctx, lx, ly, l.stufe, t, 0.9);
+      }
+    }
+
+    // Duftstraßen & Sammel-Trupps (vom nächsten Stützpunkt aus – Hügel oder Lager)
     const raten = d.revier;
     for (const [qid, tr] of Object.entries(r.trupps)) {
       const q = r.quellen.find(x => x.id === +qid);
       if (!q) continue;
       const Q = QUELLEN[q.typ];
       const qx = (q.x + 0.5) * T, qy = (q.y + 0.5) * T;
+      const basis = naechsteBasis(r, q.x, q.y);
+      const NX = (basis.x + 0.5) * T, NY = (basis.y + 0.5) * T;
       const mx = (NX + qx) / 2, my = (NY + qy) / 2;
       const nx = -(qy - NY), ny = qx - NX, nl = Math.hypot(nx, ny) || 1;
       const bend = ((q.id * 37) % 7 - 3) * 0.06 * nl;
@@ -416,7 +583,7 @@ export class RevierRenderer {
           const px = ix + (-dy / dl) * off, py = iy + (dx / dl) * off;
           if (!inView(px, py)) continue;
           const ang = Math.atan2(dy, dx) + (zurueck ? Math.PI : 0);
-          drawAntTop(ctx, px, py, ang, Math.floor(t * 10 + i) % 4, zurueck && aktiv ? LADUNG[Q.gibt] : '');
+          drawAntTop(ctx, px, py, ang, Math.floor(t * 10 + i) % 4, zurueck && aktiv ? LADUNG[Q.pollen ? 'pollen' : Q.gibt] : '');
         }
       }
     }
@@ -430,8 +597,17 @@ export class RevierRenderer {
         if (ahnen && q.menge > 0) drawEmoji(ctx, '❔', x, y + 8, 20, 0.55 + 0.2 * Math.sin(t * 2 + q.id));
         continue;
       }
-      if (q.typ === 'schatz' && q.menge <= 0) continue;
+      if ((q.typ === 'schatz' || q.typ === 'fund') && q.menge <= 0) continue;
       const Q = QUELLEN[q.typ];
+      if (q.typ === 'fund') {
+        const b = Math.sin(t * 2.5 + q.id) * 2;
+        if (this.selected === q.id) { ctx.strokeStyle = `rgba(255,236,140,${0.65 + 0.35 * Math.sin(t * 4)})`; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x, y, T * 0.75, 0, 7); ctx.stroke(); }
+        drawGlow(ctx, '255,250,200', x, y, 26 + b, 0.45);
+        ctx.drawImage(quelleKunst(q.typ), x - T, y - T, T * 2, T * 2);
+        drawEmoji(ctx, FUNDE[q.fund]?.icon ?? '✨', x, y + 7 + b, 20);
+        if (Math.sin(t * 3 + q.id * 1.7) > 0.85) drawEmoji(ctx, '✨', x + 12, y - 10, 11);
+        continue;
+      }
       const leer = Q.gibt && Q.gibt !== 'tau' && q.menge <= 0.5;
       if (this.selected === q.id) {
         ctx.strokeStyle = `rgba(255,236,140,${0.65 + 0.35 * Math.sin(t * 4)})`; ctx.lineWidth = 3;
@@ -494,28 +670,42 @@ export class RevierRenderer {
     for (const e of r.exp) {
       const ex = (e.x + 0.5) * T, ey = (e.y + 0.5) * T, tx = (e.tx + 0.5) * T, ty = (e.ty + 0.5) * T;
       ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 2; ctx.setLineDash([2, 7]);
-      ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(e.phase === 'heim' ? NX : tx, e.phase === 'heim' ? NY : ty); ctx.stroke(); ctx.setLineDash([]);
+      const HX = ((e.hx ?? NEST.x) + 0.5) * T, HY = ((e.hy ?? NEST.y) + 0.5) * T;
+      ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(e.phase === 'heim' ? HX : tx, e.phase === 'heim' ? HY : ty); ctx.stroke(); ctx.setLineDash([]);
       if (e.phase !== 'heim') {
         const p = 0.5 + 0.5 * Math.sin(t * 4);
         ctx.strokeStyle = `rgba(255,120,80,${0.5 + p * 0.4})`; ctx.lineWidth = 2.5;
         ctx.beginPath(); ctx.arc(tx, ty, 12 + p * 6, 0, 7); ctx.stroke();
       }
       drawGlow(ctx, '255,255,220', ex, ey, (REVIER.expSicht + (d.fx.sicht ?? 0) * 0.8) * T, 0.12);
-      const ang = e.phase === 'heim' ? Math.atan2(NY - ey, NX - ex) : Math.atan2(ty - ey, tx - ex);
+      const ang = e.phase === 'heim' ? Math.atan2(HY - ey, HX - ex) : Math.atan2(ty - ey, tx - ex);
       const n = Math.min(5, e.n);
       for (let i = 0; i < n; i++) {
         const ox = Math.cos(ang + 2.4 + i * 0.9) * (i ? 9 : 0), oy = Math.sin(ang + 2.4 + i * 0.9) * (i ? 9 : 0);
-        drawAntTop(ctx, ex + ox, ey + oy, e.phase === 'suche' ? t * 3 + i : ang, Math.floor(t * 12 + i) % 4, e.fund && e.phase === 'heim' ? '#ffd34d' : '');
+        drawAntTop(ctx, ex + ox, ey + oy, e.phase === 'suche' ? t * 3 + i : ang, Math.floor(t * 12 + i) % 4, (e.fund || e.fundstueck) && e.phase === 'heim' ? '#ffd34d' : '');
       }
       drawEmoji(ctx, e.phase === 'suche' ? '🔍' : '🚩', ex + 4, ey - 12, 16);
     }
 
     // Werkzeug: Expeditionsziel-Vorschau
+    if (this.tool === 'zelt' && this.hoverCell) {
+      const [hx, hy] = this.hoverCell;
+      const x = (hx + 0.5) * T, y = (hy + 0.5) * T;
+      const ok = lagerPlatz(r, hx, hy).ok;
+      ctx.fillStyle = ok ? 'rgba(120,255,140,.22)' : 'rgba(255,90,90,.22)';
+      ctx.strokeStyle = ok ? 'rgba(120,255,140,.9)' : 'rgba(255,90,90,.9)'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(x, y, T * 0.8, 0, 7); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 0.75; zeichneLager(ctx, x, y, 1, t, 0.9); ctx.globalAlpha = 1;
+      if (ok) { ctx.strokeStyle = 'rgba(255,240,200,.35)'; ctx.setLineDash([4, 6]); ctx.beginPath(); ctx.arc(x, y, (GEBAEUDE.zelt.sicht ?? 3) * T, 0, 7); ctx.stroke(); ctx.setLineDash([]); }
+    }
     if (this.tool === 'exp' && this.hoverCell) {
       const [hx, hy] = this.hoverCell;
       const x = (hx + 0.5) * T, y = (hy + 0.5) * T;
+      const b = naechsteBasis(r, hx, hy);
+      const BX = (b.x + 0.5) * T, BY = (b.y + 0.5) * T;
       ctx.strokeStyle = 'rgba(255,240,170,.9)'; ctx.lineWidth = 2.5; ctx.setLineDash([8, 6]); ctx.lineDashOffset = -t * 20;
-      ctx.beginPath(); ctx.moveTo(NX, NY); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(BX, BY); ctx.lineTo(x, y); ctx.stroke(); ctx.setLineDash([]);
+      if (b.lager) drawEmoji(ctx, '⛺', BX, BY - 16, 14);
       ctx.fillStyle = 'rgba(255,240,170,.25)'; ctx.beginPath(); ctx.arc(x, y, (REVIER.expSicht + (d.fx.sicht ?? 0) * 0.8) * T, 0, 7); ctx.fill();
       drawEmoji(ctx, '🚩', x, y + 6, 24);
     }

@@ -162,3 +162,25 @@ Die alte Version zeichnete ungebremst jedes Bild komplett neu (Gelände 3840 × 
 - Adaptive Bildrate: 60 fps bei Interaktion, 30 im Ruhezustand, 5 hinter Fenstern; automatische Auflösungsreduktion, wenn Zeichnen dauerhaft zu lange dauert.
 - Kein `backdrop-filter`, keine `box-shadow`-Endlosanimationen; Vignette als statisches CSS-Overlay.
 - Messung (Headless-Chromium, 1440 × 900, Retina): JavaScript-Zeit 610 → 27 ms pro Sekunde.
+
+## Version 3: Schule, Entwicklungslinien, Welt
+
+### Schule statt freiem Quiz
+- **Stundenplan:** 5 Tage × 4 Stunden (D 5, M 5, SU 3, Sport & Miteinander 3, E 2, Mu/Ku 2). Das Fach ist vorgegeben, das Thema frei wählbar – Struktur wie in der echten Schule, aber mit Selbstbestimmung.
+- **Tests:** Jedes Thema wird (nach Schwierigkeit sortiert) in feste Tests à ca. 6 Fragen geteilt; Zufallsaufgaben-Themen haben 3 Tests (Niveau 1–3). Ein Test ist bestanden ab der Hälfte richtiger Antworten beim ersten Versuch und kommt dann nicht wieder. Falsche Fragen werden sofort in der „Zweiten Chance" geübt (zählt nicht fürs Testergebnis).
+- **Schulschluss:** Nach vier Stunden endet der Schultag; der nächste beginnt mit dem nächsten Ameisentag (4 Minuten). Das dosiert Bildschirmzeit und lenkt auf Bauen, Revier und Denksport.
+- **Transparente Belohnung:** Vor jedem Test sieht das Kind den möglichen Bauplan (als gezeichnetes, animiertes Gebäude) und eine Belohnungs-Leiter. Perfekt → Bauplan; sonst Rohstoffe proportional zu den richtigen Antworten (+ Bonus ab „bestanden").
+
+### Baupläne & Entwicklungslinien
+- 36 Linien mit 2–5 Stufen (110 Baupläne), z. B. Kindergarten → Schule → Berufsschule → Gymnasium → Universität. Höhere Stufen entstehen durch Ausbau an derselben Stelle (Fläche bleibt), das Gebäude arbeitet währenddessen weiter.
+- Baupläne werden dauerhaft freigeschaltet. Jede Linie gehört zu einem Fach. Die Verteilung legt niedrige Stufen auf leichte Tests, hohe Stufen (Gymnasium, Universität) erst auf Tests mit Niveau 2–3 – die Lernentwicklung spiegelt die Gebäudeentwicklung. Höchstens gut die Hälfte der Themen eines Fachs trägt gleichzeitig einen Bauplan.
+- 228 Tests > 106 gewinnbare Baupläne: Sind alle vergeben, gibt es nur noch Rohstoffe.
+
+### Ameisen-Beobachtung
+Jede sichtbare Ameise ist eine dauerhafte Bürgerin (oder Drohne) mit Namen, Freundin, Freund, Wohnung, Schulort (abhängig von gebauten Bildungsgebäuden und Alter), Traum und Erlebnissen (aus Spielereignissen wie Bau, Ausbau, perfekte Tests, Hochzeitsflug). Alle Texte sind positiv formuliert; Mängel im Volk werden als Vorfreude ausgedrückt („Ich freue mich riesig auf neue Zimmer!").
+
+### Revier, Zelte, Pollen
+Das Revier ist 64 × 44 Felder groß, mit Pollen-Quellen (beschleunigen die Brut um bis zu 30 %) und 16 Fundstücken. Zelte (Zelt → Basislager → Außenposten) dienen als Stützpunkte: Expeditionen starten am nächsten Lager, Sammelwege werden von dort gemessen.
+
+### Welt & Hochzeitsflug
+Dritte Ansicht: Übersichtskarte mit Heimatnest, Revier-Kreis und 9 Zielorten. Der Hochzeitsflug ist ein Ring-Flugspiel (Pseudo-3D). Erfolg gründet eine Tochterkolonie mit dauerhaftem Bonus und täglichen Grüßen; Misserfolg kostet nichts.

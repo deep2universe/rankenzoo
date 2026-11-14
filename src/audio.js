@@ -61,6 +61,16 @@ export const sfx = {
   built: () => [392, 523, 659, 784].forEach((f, i) => tone(f, i * 0.09, 0.3, { type: 'sine', vol: 0.22 })),
   tick: () => tone(1200, 0, 0.03, { type: 'square', vol: 0.04 }),
   whoosh: () => noise(0, 0.4, 0.12, 2000),
+  // Hochzeitsflug: glockiger Ring-Klang, steigt mit der Serie (pentatonisch)
+  ring: (serie = 1) => {
+    const st = [0, 2, 4, 7, 9, 12, 14, 16, 19][Math.min(8, Math.max(0, serie - 1))];
+    const f = 587 * Math.pow(2, st / 12);
+    tone(f, 0, 0.45, { type: 'sine', vol: 0.2 });
+    tone(f * 2, 0.04, 0.35, { type: 'triangle', vol: 0.07 });
+    tone(f * 3, 0.08, 0.5, { type: 'sine', vol: 0.04 });
+  },
+  // sanftes Hinabgleiten
+  sinken: () => { tone(620, 0, 1.1, { type: 'sine', vol: 0.12, slide: -330, attack: 0.05 }); noise(0, 0.9, 0.05, 900); },
 };
 
 // --- Sanfte, generative Musik (pentatonisch, Marimba-artig) ---

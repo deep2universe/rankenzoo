@@ -6,7 +6,6 @@ import { newGame, addRoom } from '../src/game/state.js';
 import { tick, derive, refreshConnectivity } from '../src/game/sim.js';
 import { canPlace, canDig, dig, computeConnectivity, setHill } from '../src/game/world.js';
 import { FAECHER, GEBAEUDE, GROUND, COLS } from '../src/game/config.js';
-import { planAuswahl } from '../src/game/actions.js';
 
 let fehler = 0;
 const ok = (bed, msg) => { if (!bed) { fehler++; console.error('✗ ' + msg); } };
@@ -146,7 +145,6 @@ for (let lvl = 2; lvl <= 6; lvl++) {
   for (const r of s.rooms.filter(r => GEBAEUDE[r.typ].zone === 'oberflaeche')) ok(r.verbunden, `${r.typ} nach Hügelstufe ${lvl} nicht verbunden`);
 }
 console.log('✓ Hügelausbau hält Eingänge offen');
-ok(planAuswahl(s, 'deutsch').length === 3, 'Planauswahl liefert nicht 3 Pläne');
 ok(Object.keys(GEBAEUDE).length >= 20, 'Zu wenige Gebäude');
 
 console.log(fehler ? `\n✗ ${fehler} Fehler` : '\n✓ Alles in Ordnung');

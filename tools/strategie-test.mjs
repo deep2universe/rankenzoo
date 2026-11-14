@@ -4,7 +4,8 @@ import { newGame, addRoom, migriere } from '../src/game/state.js';
 import { tick, derive, refreshConnectivity } from '../src/game/sim.js';
 import { setzeTrupp, sendeExpedition, handeln, handelMoeglich, aufdecken, NEST, erkundetAnteil } from '../src/game/revier.js';
 import { starteForschung, kannForschen, TECHS, hatTech } from '../src/game/forschung.js';
-import { verfuegbarePlaene, kopierePlan, placeBuilding } from '../src/game/actions.js';
+import { verfuegbarePlaene, placeBuilding } from '../src/game/actions.js';
+import { schalteFrei, ausbauen, istFrei } from '../src/game/bauplaene.js';
 import { canPlace, canDig, dig } from '../src/game/world.js';
 import { GEBAEUDE, GROUND, COLS, QUELLEN } from '../src/game/config.js';
 import { MISSIONEN } from '../src/game/missions.js';
@@ -18,6 +19,8 @@ const s = newGame('Test', 'Test');
 const r = s.revier;
 ok(r.quellen.length >= 18, `zu wenige Quellen (${r.quellen.length})`);
 ok(r.quellen.filter(q => q.entdeckt).length >= 2, 'am Anfang sollen 2 Quellen sichtbar sein');
+ok(r.quellen.filter(q => q.typ === 'fund').length >= 10, 'zu wenige Fundstücke im Nebel');
+ok(r.quellen.some(q => QUELLEN[q.typ].pollen), 'keine Pollen-Quellen');
 ok(r.quellen.some(q => q.typ === 'nachbar'), 'kein Nachbarvolk');
 ok(r.quellen.filter(q => q.typ === 'schatz').length === 5, 'nicht 5 Schätze');
 ok(r.quellen.every(q => QUELLEN[q.typ]), 'unbekannter Quellentyp');
@@ -93,7 +96,7 @@ console.log('✓ Handel mit dem Nachbarvolk');
 // 7) Alle Gebäude lassen sich platzieren; Material-Kosten greifen
 const b = newGame('Bau', 'Bau');
 for (let pass = 0; pass < 3; pass++) {
-  for (const yy of [GROUND + 3, GROUND + 9, GROUND + 14, GROUND + 20, GROUND + 25, GROUND + 29]) for (let x = 2; x < COLS - 2; x++) if (canDig(b.world, x, yy).ok) dig(b.world, x, yy);
+  for (const yy of [GROUND + 3, GROUND + 9, GROUND + 14, GROUND + 17, GROUND + 20, GROUND + 25, GROUND + 29]) for (let x = 2; x < COLS - 2; x++) if (canDig(b.world, x, yy).ok) dig(b.world, x, yy);
   for (let y = GROUND + 3; y < GROUND + 30; y++) for (const x of [4, 10, 20, 31, 40, 50, 56]) if (canDig(b.world, x, y).ok) dig(b.world, x, y);
 }
 b.world.hill = 4;
@@ -101,7 +104,7 @@ const { setHill } = await import('../src/game/world.js');
 setHill(b.world, 4);
 refreshConnectivity(b);
 for (const typ of Object.keys(GEBAEUDE)) {
-  if (typ === 'koenigin') continue;
+  if (typ === 'koenigin' || GEBAEUDE[typ].zone === 'revier' || GEBAEUDE[typ].lstufe > 1) continue;
   let gesetzt = false;
   for (let y = 0; y < GROUND + 30 && !gesetzt; y++) for (let x = 2; x < COLS - 6 && !gesetzt; x++) {
     if (canPlace(b.world, b.rooms, typ, x, y).ok) { addRoom(b, typ, x, y, true); refreshConnectivity(b); gesetzt = true; }
@@ -111,16 +114,30 @@ for (const typ of Object.keys(GEBAEUDE)) {
 b.volk.arbeiterinnen = 250;
 d = lauf(b, 30);
 ok(Number.isFinite(d.zufriedenheit) && Number.isFinite(b.res.fp) && d.fpProSek > 0.01, 'Werte mit allen Gebäuden ungültig');
-console.log(`✓ Alle ${Object.keys(GEBAEUDE).length} Gebäude platziert · ${(d.fpProSek * 60).toFixed(1)} 🔬/min · Zufriedenheit ${Math.round(d.zufriedenheit)} %`);
-// Materialkosten
+// Alle Ausbaustufen einmal im Spiel durchrechnen
+for (const rr of b.rooms) { const G = GEBAEUDE[rr.typ]; if (G.lmax > 1) rr.typ = Object.keys(GEBAEUDE).find(k => GEBAEUDE[k].linie === G.linie && GEBAEUDE[k].lstufe === G.lmax); }
+d = lauf(b, 10);
+ok(Number.isFinite(d.zufriedenheit) && Number.isFinite(b.res.fp), 'Werte mit höchsten Ausbaustufen ungültig');
+console.log(`✓ Alle ${Object.keys(GEBAEUDE).length} Gebäude (Stufe 1 platziert, höchste Stufen gerechnet) · ${(d.fpProSek * 60).toFixed(1)} 🔬/min · Zufriedenheit ${Math.round(d.zufriedenheit)} %`);
+// Materialkosten & Bauplan-Pflicht
 const m = newGame('M', 'M');
-m.plaene.labor = 1; m.res.sterne = 999; m.res.material = 0;
+m.res.sterne = 999; m.res.material = 0;
+ok(!placeBuilding(m, 'labor', 30, GROUND + 10).ok, 'Labor ohne Bauplan baubar');
+schalteFrei(m, 'labor');
 const lab = placeBuilding(m, 'labor', 30, GROUND + 10);
 ok(!lab.ok && /Baumaterial/.test(lab.grund ?? ''), 'Labor ohne Baumaterial baubar');
-// Architektur
-ok(!kopierePlan(b, 'kino').ok, 'Plan-Kopie ohne Architektur möglich');
-b.forschung.fertig.push('architektur'); b.res.material = 999; b.res.sterne = 999;
-ok(kopierePlan(b, 'kino').ok && b.plaene.kino >= 1, 'Plan-Kopie mit Architektur geht nicht');
+ok(!placeBuilding(m, 'schule', 30, GROUND + 10).ok, 'Ausbaustufe lässt sich direkt bauen');
+// Ausbau an Ort und Stelle
+const kino = b.rooms.find(rr => GEBAEUDE[rr.typ].linie === 'kino');
+kino.typ = 'kino';
+b.res.sterne = 999; b.res.material = 999;
+ok(!ausbauen(b, kino).ok, 'Ausbau ohne Bauplan möglich');
+schalteFrei(b, 'grosskino');
+ok(ausbauen(b, kino).ok, 'Ausbau mit Bauplan geht nicht');
+const masse0 = [kino.w, kino.h];
+lauf(b, 120);
+ok(kino.typ === 'grosskino' && !kino.ausbau, `Ausbau wird nicht fertig (${kino.typ})`);
+ok(kino.w === masse0[0] && kino.h === masse0[1], 'Ausbau verändert die Raumgröße');
 
 // 8) Alte Spielstände
 const alt = JSON.parse(JSON.stringify({ ...newGame('Alt', 'Alt'), world: null }));
@@ -128,6 +145,7 @@ delete alt.revier; delete alt.forschung; delete alt.befehle; delete alt.res.mate
 alt.world = newGame('x', 'y').world;
 migriere(alt);
 ok(alt.revier && alt.forschung && alt.befehle && alt.res.material >= 0, 'Migration alter Spielstände unvollständig');
+ok(alt.bauplaene && alt.schule && alt.welt && alt.buerger, 'Migration: neue Felder fehlen');
 ok(Number.isFinite(derive(alt).zufriedenheit), 'migrierter Spielstand rechnet nicht');
 
 // 9) Missionen eindeutig

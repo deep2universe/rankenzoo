@@ -1,6 +1,8 @@
 // Weitere Bildschirme: Start, Aufgaben, Wissensbuch, Einstellungen, Kammer-Info.
 import { h, fmt, fill } from '../util.js';
-import { GEBAEUDE, FAECHER } from '../game/config.js';
+import { GEBAEUDE, FAECHER, LINIEN } from '../game/config.js';
+import { ausbauInfo, istFrei } from '../game/bauplaene.js';
+import { planKarte } from './bauplanBuch.js';
 import { MISSIONEN, fortschritt } from '../game/missions.js';
 import { themenVon, meisterschaft, anzahlFragen, themaStand, fachStand } from '../quiz/engine.js';
 import { archivAnsicht, closeTooltip } from './archiv.js';
@@ -185,19 +187,47 @@ export function roomInfo(game, room) {
   if (ef.wohnraum) wirkung.push(`🛏️ Platz für ${ef.wohnraum} Ameisen`);
   if (ef.brutPlatz) wirkung.push(`🥚 Platz für ${ef.brutPlatz} Eier, Larven oder Puppen`);
   if (ef.lager) wirkung.push(`🫙 +${ef.lager} Lagerplatz`);
-  const status = room.bau < 1 ? `🏗️ Wird gebaut: ${Math.round(room.bau * 100)} %` : room.verbunden === false ? '⚠️ Keine Verbindung zur Königin! Grabe einen Gang hierher.' : g.personal ? `${eff >= 1 ? '✅' : '⚠️'} Arbeitet mit ${Math.round(Math.min(1, eff) * 100)} % Kraft` : '✅ In Betrieb';
+  const status = room.bau < 1 ? `🏗️ Wird gebaut: ${Math.round(room.bau * 100)} %` : room.ausbau ? `⬆️ Wird ausgebaut: ${Math.round(room.ausbau.p * 100)} %` : room.verbunden === false ? '⚠️ Keine Verbindung zur Königin! Grabe einen Gang hierher.' : g.personal ? `${eff >= 1 ? '✅' : '⚠️'} Arbeitet mit ${Math.round(Math.min(1, eff) * 100)} % Kraft` : '✅ In Betrieb';
+  const L = LINIEN[g.linie];
+  const stufen = L?.stufen ?? [room.typ];
+  // Ausbau-Bereich
+  let ausbau = null;
+  if (room.ausbau) {
+    const Z = GEBAEUDE[room.ausbau.ziel];
+    ausbau = h('div.ausbau-box.laeuft', h('h4', `⬆️ Ausbau zu ${Z.icon} ${Z.name}`), h('div.mini-track', h('i', { style: { width: Math.round(room.ausbau.p * 100) + '%' } })),
+      h('small', 'Deine Bauarbeiterinnen sind dabei – das Gebäude arbeitet so lange weiter wie bisher.'));
+  } else {
+    const info = ausbauInfo(game.state, room, d.fx);
+    if (info) {
+      const Z = GEBAEUDE[info.ziel];
+      ausbau = h('div.ausbau-box' + (info.frei ? '' : '.zu'),
+        h('h4', info.frei ? `⬆️ Ausbauen zu ${Z.name}` : `🔒 Nächste Stufe: ${Z.name}`),
+        planKarte(info.ziel, { zoom: 0.8, lebendig: info.frei, extra: h('div.pv-info', Z.text) }),
+        info.frei
+          ? h('div.ausbau-aktion',
+            h('span.kosten', `Kosten: ⭐ ${info.kosten.sterne}${info.kosten.material ? ` · 🪵 ${info.kosten.material}` : ''}`),
+            h('button.btn.gruen.klein', { disabled: !info.ok, title: info.grund ?? '', onclick: () => { m.close(); game.ausbauen(room); } }, '⬆️ Ausbauen'),
+            info.ok ? null : h('div.req', info.grund))
+          : h('div.req', `📚 Den Bauplan gewinnst du mit einem perfekten Test im Quiz (vor allem in ${FAECHER[L.fach]?.icon ?? ''} ${FAECHER[L.fach]?.name ?? 'der Schule'}).`));
+    } else if (stufen.length > 1) ausbau = h('div.ausbau-box.max', h('h4', '🌟 Höchste Stufe erreicht!'), h('small', 'Prächtiger geht es nicht.'));
+  }
   const m = openModal({ titel: g.name, unter: status, icon: g.icon, klasse: 'schmal', farbe: [g.farbe, '#ffc93c'],
     inhalt: h('div',
+      stufen.length > 1 ? h('div.stufen-pfad', stufen.map((k, i) => [i ? h('span.sp-pfeil', '›') : null,
+        h('span.sp-stufe' + (k === room.typ ? '.ich' : istFrei(game.state, k) ? '.frei' : ''), { title: GEBAEUDE[k].name }, GEBAEUDE[k].icon, h('small', i + 1))])) : null,
       h('p', { style: { fontSize: '1.05rem', lineHeight: '1.45', marginTop: 0 } }, g.text),
       h('div.info-grid',
         h('div.info-box', h('h4', 'Wirkung'), wirkung.length ? wirkung.map(w => h('div', w)) : h('div', '—')),
-        h('div.info-box', h('h4', 'Ausgebildete Ameisen'), g.personal ? [h('div', `👷 ${pers} von ${g.personal} ${g.beruf.name}${g.personal > 1 ? 'nen' : ''}`),
+        h('div.info-box', h('h4', 'Ausgebildete Ameisen'), g.personal ? [h('div', `👷 ${pers} von ${g.personal} ${g.beruf?.name ?? 'Fachkraft'}${g.personal > 1 ? 'nen' : ''}`),
           pers < g.personal ? h('div', { style: { fontSize: '.85rem', color: '#a0522d' } }, 'Mehr Arbeiterinnen nötig – lass dein Volk wachsen!') : null] : h('div', 'Braucht kein Personal.')),
       ),
+      ausbau,
       h('div.wusstest', h('span.em', '💡'), h('div', h('b', 'Wusstest du? '), g.fakt)),
       g.abreissbar === false ? null : h('div', { style: { textAlign: 'right', marginTop: '14px' } },
         h('button.btn.klein.pink', { onclick: async () => {
-          if (await confirmDialog(`${g.name} abreißen?`, room.bau < 1 ? 'Du bekommst Bauplan und Sterne zurück.' : `Du bekommst den Bauplan und ${Math.floor(g.kosten / 2)} ⭐ zurück.`, 'Abreißen')) {
+          const bez = room.bezahlt ?? { sterne: g.kosten ?? 0, material: g.material ?? 0 };
+          const f = room.bau < 1 ? 1 : 0.5;
+          if (await confirmDialog(`${g.name} abreißen?`, `Du bekommst ${Math.floor(bez.sterne * f)} ⭐${bez.material ? ` und ${Math.floor(bez.material * f)} 🪵` : ''} zurück. Der Bauplan bleibt dir erhalten.`, 'Abreißen')) {
             m.close(); game.demolishRoom(room);
           }
         } }, '🧹 Abreißen')),

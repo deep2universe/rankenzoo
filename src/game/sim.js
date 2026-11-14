@@ -2,7 +2,9 @@
 import { GEBAEUDE, SIM, BEDUERFNISSE, rangVon } from './config.js';
 import { computeConnectivity } from './world.js';
 import { forschungsEffekte, forschungTick } from './forschung.js';
-import { revierBedarf, revierRaten, revierTick } from './revier.js';
+import { revierBedarf, revierRaten, revierTick, lagerEffekte } from './revier.js';
+import { weltEffekte, startplatzStufe, drohnenNoetig } from './welt.js';
+import { ausbauFertig } from './bauplaene.js';
 import { emit } from '../events.js';
 import { clamp } from '../util.js';
 
@@ -15,19 +17,21 @@ export function derive(state) {
     verbrauch: 0, sterneProMin: 0, zufriedenBonus: 0, joker: 0,
     fp: 0, fpMult: 0, forschTempo: 0, wacheStaerke: 0, sicht: 0, expSlots: 0, expTempo: 0, revierBonus: 0, handel: 0,
     lagerBonus: 0, weideBonus: 0, eiTempo: 0, bauTempo: 0, hygieneMult: 0, waermeMult: 0, freizeitMult: 0,
-    quelleNahrung: 0, quelleNachwuchs: 0, schatzBonus: 0,
+    quelleNahrung: 0, quelleNachwuchs: 0, schatzBonus: 0, flugBonus: 0, ausbauRabatt: 0, pollen: 0,
   };
-  // Forschung wirkt immer (unabhängig vom Personal)
+  // Forschung und Tochterkolonien wirken immer (unabhängig vom Personal)
   for (const [k, val] of Object.entries(forschungsEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
+  for (const [k, val] of Object.entries(weltEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
+  if (state.revier) for (const [k, val] of Object.entries(lagerEffekte(state.revier))) fx[k] = (fx[k] ?? 0) + val;
   const fertig = state.rooms.filter(r => r.bau >= 1 && r.verbunden !== false);
-  // Spezial-Effekte, die andere Effizienzen beeinflussen, zuerst grob sammeln
-  for (const r of fertig) if (r.typ === 'universitaet') fx.ausbildung += GEBAEUDE.universitaet.effekte.ausbildung;
+  // Spezial-Effekte, die andere Effizienzen beeinflussen, zuerst grob sammeln (Universität, Berufsschule)
+  for (const r of fertig) fx.ausbildung += GEBAEUDE[r.typ].effekte?.ausbildung ?? 0;
   const befehle = state.befehle ?? { bauMax: 3, ammen: 'normal' };
 
   // --- Arbeitsverteilung ---
   let frei = v.arbeiterinnen;
   const jobs = { bau: 0, ammen: 0, personal: 0, sammler: 0 };
-  const baustellen = state.rooms.filter(r => r.bau < 1 && r.verbunden !== false);
+  const baustellen = state.rooms.filter(r => (r.bau < 1 || r.ausbau) && r.verbunden !== false);
   const bauProStelle = new Map();
   for (const r of baustellen) {
     const n = Math.min(befehle.bauMax ?? 3, Math.max(0, Math.floor(frei * 0.6) - jobs.bau), frei);
@@ -78,9 +82,10 @@ export function derive(state) {
     if (ef.lager) lager += ef.lager * Math.max(0.5, Math.min(e, 1));
     if (ef.brutPlatz) brutPlatz += ef.brutPlatz;
     for (const key of ['brutTempo', 'sammelBonus', 'tempo', 'quizBonus', 'wohnBonus', 'pilzBonus', 'verbrauch', 'sterneProMin', 'zufriedenBonus', 'joker',
-      'fp', 'forschTempo', 'wacheStaerke', 'sicht', 'expSlots', 'expTempo', 'revierBonus', 'handel', 'lagerBonus']) {
+      'fp', 'forschTempo', 'wacheStaerke', 'sicht', 'expSlots', 'expTempo', 'revierBonus', 'handel', 'lagerBonus', 'eiTempo', 'bauTempo', 'weideBonus']) {
       if (ef[key]) fx[key] += ef[key] * Math.min(e, 1.1);
     }
+    if (ef.flugBonus) fx.flugBonus = Math.max(fx.flugBonus, ef.flugBonus); // Startplatz-Stufe zählt, nicht die Besetzung
   }
   wohnraum = Math.round(SIM.grundWohnraum + (wohnraum - SIM.grundWohnraum) * (1 + fx.wohnBonus));
   lager = Math.round(lager * (1 + fx.lagerBonus));
@@ -96,8 +101,11 @@ export function derive(state) {
   // abnehmender Ertrag: je mehr Sammlerinnen, desto weiter die Wege
   const regen = state.revier?.wetter?.typ === 'regen';
   const sammelRate = (jobs.sammler / (1 + jobs.sammler / 40)) * SIM.sammeln * (1 + fx.sammelBonus) * (1 + fx.tempo) * (istNacht ? 0.5 : 1) * (regen ? 0.6 : 1);
-  const revier = state.revier ? revierRaten(state, fx, revierFaktor, tagPhase) : { nahrung: 0, material: 0, sterne: 0, tau: 0, pro: new Map() };
+  const revier = state.revier ? revierRaten(state, fx, revierFaktor, tagPhase) : { nahrung: 0, material: 0, sterne: 0, tau: 0, pollen: 0, pro: new Map() };
   versorgung.hygiene += revier.tau;
+  // Pollen ist eiweißreich: Larven wachsen schneller (bis +30 %)
+  fx.pollen = revier.pollen * 60;
+  fx.brutTempo += Math.min(0.3, fx.pollen / 30);
   const fpProSek = ((SIM.fpGrund + fx.fp) / 60) * (1 + fx.fpMult);
   const vb = SIM.verbrauch;
   const larven = state.brut.filter(b => b.s === 'larve').length;
@@ -134,14 +142,23 @@ export function tick(state, dt) {
   // Nahrung
   state.res.nahrung = clamp(state.res.nahrung + (d.nahrungProSek - d.verbrauch) * dt, 0, d.lager);
 
-  // Bau
+  // Bau & Ausbau
   for (const r of state.rooms) {
-    if (r.bau >= 1 || r.verbunden === false) continue;
+    if (r.verbunden === false) continue;
     const k = d.bauProStelle.get(r.id) ?? 0;
-    r.bau = Math.min(1, r.bau + (dt * k * (1 + d.fx.tempo) * (1 + d.fx.bauTempo)) / GEBAEUDE[r.typ].bauzeit);
-    if (r.bau >= 1) {
-      state.stats.gebaut++;
-      emit('gebaut', r);
+    const tempo = dt * k * (1 + d.fx.tempo) * (1 + d.fx.bauTempo);
+    if (r.bau < 1) {
+      r.bau = Math.min(1, r.bau + tempo / GEBAEUDE[r.typ].bauzeit);
+      if (r.bau >= 1) {
+        state.stats.gebaut++;
+        emit('gebaut', r);
+      }
+    } else if (r.ausbau) {
+      r.ausbau.p = Math.min(1, r.ausbau.p + tempo / (GEBAEUDE[r.ausbau.ziel]?.bauzeit ?? 20));
+      if (r.ausbau.p >= 1) {
+        state.stats.ausgebaut = (state.stats.ausgebaut ?? 0) + 1;
+        ausbauFertig(state, r);
+      }
     }
   }
 
@@ -224,11 +241,12 @@ export function refreshConnectivity(state) {
 }
 
 export function hochzeitsflugBereit(state, d) {
-  const platz = state.rooms.find(r => r.typ === 'hochzeit' && r.bau >= 1 && r.verbunden !== false);
+  const stufe = startplatzStufe(state);
+  const drohnen = drohnenNoetig(state);
   const gruende = [];
-  if (!platz) gruende.push('Baue einen Hochzeitsflug-Startplatz am Hügelrand');
-  if (state.volk.drohnen < 10) gruende.push(`Mindestens 10 Drohnen (du hast ${state.volk.drohnen})`);
+  if (!stufe) gruende.push('Baue einen Hochzeitsflug-Startplatz am Hügelrand');
+  if (state.volk.drohnen < drohnen) gruende.push(`Mindestens ${drohnen} Drohnen (du hast ${state.volk.drohnen})`);
   if (state.volk.arbeiterinnen < 40) gruende.push(`Mindestens 40 Arbeiterinnen (du hast ${state.volk.arbeiterinnen})`);
   if (d.zufriedenheit < 60) gruende.push(`Zufriedenheit mind. 60 % (jetzt ${Math.round(d.zufriedenheit)} %)`);
-  return { ok: gruende.length === 0, gruende };
+  return { ok: gruende.length === 0, gruende, drohnen };
 }

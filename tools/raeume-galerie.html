@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Kammer-Galerie</title>
+<!-- Entwickler-Werkzeug: zeigt alle Kammer-Typen (Entwicklungslinien) nebeneinander.
+     Start: node tools/serve.mjs 8090  →  http://localhost:8090/tools/raeume-galerie.html
+     Optional: ?t=2.5 (Animationszeit), ?zoom=2 -->
+<style>
+  body { margin: 0; background: #1b120a; color: #f3e3c8; font: 12px Fredoka, Nunito, sans-serif; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script type="module">
+import { drawRoomStatic, drawRoomDynamic, lampPositions } from '../src/render/rooms.js';
+import { GEBAEUDE, LINIEN } from '../src/game/config.js';
+import { drawGlow } from '../src/render/sprites.js';
+
+const q = new URLSearchParams(location.search);
+const T = 32, t = Number(q.get('t') ?? 1.7), Z = Number(q.get('zoom') ?? 1);
+const nurLinie = q.get('linie');
+const zeilen = [];
+for (const [key, L] of Object.entries(LINIEN)) {
+  if (nurLinie && key !== nurLinie) continue;
+  if (L.stufen.every(k => GEBAEUDE[k].zone === 'revier')) continue;
+  zeilen.push({ titel: key, eintraege: L.stufen.map(k => ({ typ: k, w: GEBAEUDE[k].w * T, h: GEBAEUDE[k].h * T })) });
+}
+// Bildungslinie in alten Maßen
+for (const [w, h] of [[96, 64], [128, 64], [160, 96]]) {
+  if (nurLinie && nurLinie !== 'kita') continue;
+  zeilen.push({ titel: `Bildung ${w}×${h}`, eintraege: LINIEN.kita.stufen.map(k => ({ typ: k, w, h })) });
+}
+
+const PAD = 14, LABEL = 18, LEFT = 110;
+let y = PAD, maxW = 0;
+for (const z of zeilen) {
+  z.y = y;
+  let x = LEFT;
+  for (const e of z.eintraege) { e.x = x; x += e.w + 40; }
+  maxW = Math.max(maxW, x);
+  y += Math.max(...z.eintraege.map(e => e.h)) + LABEL + 14;
+}
+const W = maxW + PAD, H = y + PAD;
+const cv = document.getElementById('c');
+const dpr = window.devicePixelRatio || 1;
+cv.width = W * Z * dpr; cv.height = H * Z * dpr;
+cv.style.width = W * Z + 'px'; cv.style.height = H * Z + 'px';
+const ctx = cv.getContext('2d');
+ctx.scale(Z * dpr, Z * dpr);
+
+let id = 1;
+function hintergrund(e, g) {
+  const { x, w, h } = e, yy = e.y;
+  if (g.zone === 'oberflaeche') {
+    const s = ctx.createLinearGradient(0, yy - 20, 0, yy + h);
+    s.addColorStop(0, '#8fd0ff'); s.addColorStop(1, '#d8f0ff');
+    ctx.fillStyle = s; ctx.fillRect(x - 10, yy - 10, w + 20, h + 10);
+    ctx.fillStyle = '#5bb04a'; ctx.fillRect(x - 10, yy + h, w + 20, 8);
+    ctx.fillStyle = '#7a5230'; ctx.fillRect(x - 10, yy + h + 8, w + 20, 4);
+  } else {
+    ctx.fillStyle = g.zone === 'huegel' ? '#7a5634' : '#3b2616';
+    ctx.fillRect(x - 10, yy - 10, w + 20, h + 20);
+  }
+}
+for (const z of zeilen) {
+  ctx.fillStyle = '#f3e3c8'; ctx.font = 'bold 12px Fredoka, sans-serif'; ctx.textAlign = 'left';
+  ctx.fillText(z.titel, PAD, z.y + 20);
+  for (const e of z.eintraege) {
+    e.y = z.y + LABEL;
+    const g = GEBAEUDE[e.typ];
+    hintergrund(e, g);
+    const room = { id: id++, typ: e.typ, x: 0, y: 0, bau: 1, verbunden: true };
+    try {
+      drawRoomStatic(ctx, room, g, e.x, e.y, e.w, e.h);
+      if (g.zone !== 'oberflaeche') {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        ctx.beginPath(); ctx.rect(e.x, e.y, e.w, e.h); ctx.clip();
+        for (const [lx, ly] of lampPositions(room, g, e.x, e.y, e.w)) drawGlow(ctx, '255,175,90', lx, ly, Math.max(e.w, e.h) * 0.7, 0.26);
+        ctx.restore();
+      }
+      ctx.save();
+      if (g.zone !== 'oberflaeche') { ctx.beginPath(); ctx.roundRect(e.x + 5, e.y + 5, e.w - 10, e.h - 10, Math.min(e.h * 0.42, 26)); ctx.clip(); }
+      drawRoomDynamic(ctx, room, g, e.x, e.y, e.w, e.h, { t, brut: null });
+      ctx.restore();
+    } catch (err) { console.error(e.typ, err); ctx.fillStyle = 'red'; ctx.fillRect(e.x, e.y, e.w, e.h); }
+    ctx.fillStyle = '#f3e3c8'; ctx.font = '10px Fredoka, sans-serif'; ctx.textAlign = 'left';
+    ctx.fillText(`${g.lstufe}/${g.lmax} ${e.typ} ${e.w}×${e.h}`, e.x, z.y + 11);
+  }
+}
+document.title = 'fertig';
+</script>
+</body>
+</html>

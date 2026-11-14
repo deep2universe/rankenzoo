@@ -2,7 +2,6 @@
 import { h, fill } from '../util.js';
 import { GEBAEUDE, SIM } from '../game/config.js';
 import { AESTE, TECHS, techStatus, kannForschen, starteForschung, brichForschungAb, hatTech } from '../game/forschung.js';
-import { planKopieKosten, kopierePlan } from '../game/actions.js';
 import { openModal, toast } from './modal.js';
 import { sfx } from '../audio.js';
 
@@ -53,19 +52,9 @@ export function openForschung(game) {
         ),
       );
     }
-    // Architektur: Baupläne kopieren
-    let kopie = null;
-    if (hatTech(s, 'architektur')) {
-      const typen = [...new Set(s.rooms.filter(r => r.bau >= 1).map(r => r.typ))].filter(t => !GEBAEUDE[t].einzigartig && t !== 'koenigin');
-      kopie = h('div.fo-kopie', h('h3', '📐 Baupläne kopieren (Architektur)'),
-        h('div.fo-kopie-liste', typen.map(typ => {
-          const k = planKopieKosten(typ);
-          return h('button.fo-kopie-karte', { onclick: () => { const r = kopierePlan(s, typ); if (r.ok) { sfx.coin(); toast(`Bauplan kopiert: ${GEBAEUDE[typ].name}`, { icon: '📐', art: 'gut' }); game.hud.planSig = ''; } else { sfx.error(); toast(r.grund, { icon: '📐', art: 'warn' }); } render(); } },
-            h('span.em', GEBAEUDE[typ].icon), h('span', GEBAEUDE[typ].name), h('small', `🪵${k.material} ⭐${k.sterne}`));
-        })));
-    }
+    const kopie = null;
     fill(m.inhalt, kopf, h('div.fo-baum', spalten), detail, kopie,
-      h('p.fo-fuss', `💡 Forschungspunkte bekommst du für jede richtige Quizantwort (+${SIM.fpProRichtig} 🔬), für Denksport (+1) und von Schule, Buchhandlung, Universität und Forschungslabor. Baumaterial 🪵 holen deine Trupps im Revier (Shift-Taste).`));
+      h('p.fo-fuss', `💡 Forschungspunkte bekommst du für jede richtige Quizantwort (+${SIM.fpProRichtig} 🔬), für Denksport (+1) und von Schulen, Bibliotheken, Universität und Forschungslabor. Baumaterial 🪵 holen deine Trupps im Revier (Shift-Taste).`));
   }
   render();
   timer = setInterval(() => { if (!m.closed && s.forschung.aktiv) render(); }, 1000);

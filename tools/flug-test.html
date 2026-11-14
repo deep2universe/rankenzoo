@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Test: Hochzeitsflug</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/minigames.css">
+  <link rel="stylesheet" href="../styles/flug.css">
+  <style>
+    body { display: grid; place-items: center; background: #3a2614; }
+    .test { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 20px; }
+    .test pre { background: rgba(0,0,0,.3); padding: 10px 14px; border-radius: 12px; min-width: 320px; white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <!-- Entwickler-Werkzeug: startet den Hochzeitsflug ohne das restliche Spiel. -->
+  <div class="test">
+    <h1>🐜 Hochzeitsflug – Testseite</h1>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="btn gruen" id="nah">Nah (15 Ringe)</button>
+      <button class="btn" id="mittel">Mittel (20, Wind)</button>
+      <button class="btn pink" id="weit">Weit (30, Wind)</button>
+    </div>
+    <pre id="out">Noch kein Flug.</pre>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script type="module">
+    import { openHochzeitsflug } from '../src/ui/hochzeitsflug.js';
+    import { topModal, closeTop } from '../src/ui/modal.js';
+    const pausen = { n: 0 };
+    const fakeGame = { pause(an) { pausen.n = Math.max(0, pausen.n + (an ? 1 : -1)); } };
+    // wie input.js im Spiel: Modal-Tasten zuerst, sonst Esc schließt
+    window.addEventListener('keydown', e => {
+      const m = topModal();
+      if (m?._key && m._key(e)) { e.preventDefault(); return; }
+      if (m && e.key === 'Escape') closeTop();
+    });
+    const STUFEN = {
+      nah: { ringe: 15, ringRadius: 1.2, tempo: 1, energie: 1, wind: false, name: 'Sonnige Lichtung', koloniename: 'Krabbelburg' },
+      mittel: { ringe: 20, ringRadius: 0.85, tempo: 1.15, energie: 1.2, wind: true, name: 'Kleeblatt-Hügel' },
+      weit: { ringe: 30, ringRadius: 0.55, tempo: 1.35, energie: 1, wind: true, name: 'Großer Eichenwald' },
+    };
+    window.ergebnisse = [];
+    window.starte = async stufe => {
+      const r = await openHochzeitsflug(fakeGame, STUFEN[stufe]);
+      window.ergebnisse.push(r);
+      document.getElementById('out').textContent = `${stufe}: ${JSON.stringify(r)}\nPausen offen: ${pausen.n}`;
+      return r;
+    };
+    window.pausen = pausen;
+    for (const k of Object.keys(STUFEN)) document.getElementById(k).onclick = () => window.starte(k);
+  </script>
+</body>
+</html>

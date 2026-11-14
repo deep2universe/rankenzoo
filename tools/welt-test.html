@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Welt-Testseite</title>
+  <!-- Entwicklerseite für die Welt-Ansicht (Renderer + Panel) ohne das ganze Spiel.
+       URL-Parameter: ?phase=0.85 (Tageszeit) &ok=1 (Flug bereit) &sel=bachufer &zoom=1.4 &regen=1 &kol=0 -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/strategie.css">
+  <link rel="stylesheet" href="../styles/welt.css">
+</head>
+<body class="modus-welt">
+  <canvas id="welt"></canvas>
+  <div id="hud"><div class="links"></div></div>
+  <script type="module">
+    import { WeltRenderer } from '../src/render/weltRenderer.js';
+    import { WeltHUD } from '../src/ui/weltUI.js';
+    import { ORTE } from '../src/game/welt.js';
+
+    const P = new URLSearchParams(location.search);
+    const canvas = document.getElementById('welt');
+    const state = {
+      zeit: 1000, spieler: { koloniename: 'Krümelhausen' },
+      welt: { kolonien: P.get('kol') === '0' ? [] : [{ ort: 'bachufer', name: 'Neu-Krümelhausen', tag: 1 }], fluege: 1, versuche: 1, gewaehlt: null },
+    };
+    if (P.get('kol') === '3') state.welt.kolonien.push({ ort: 'lichtung', name: 'Klein-Krümelhausen', tag: 4 }, { ort: 'blumentopf', name: 'Ober-Krümelhausen', tag: 5 });
+    const bereit = P.get('ok') === '1';
+    const R = new WeltRenderer(canvas);
+    const game = {
+      state, weltR: R,
+      hochzeitsflugStatus: () => bereit ? { ok: true, gruende: [] } : { ok: false, gruende: ['Baue einen Hochzeitsflug-Startplatz am Hügelrand', 'Mindestens 8 Drohnen (du hast 3)', 'Zufriedenheit mind. 60 % (jetzt 52 %)'] },
+      starteHochzeitsflug: id => { console.log('starteHochzeitsflug', id); window.gestartet = id; },
+    };
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, R.maxDpr);
+      canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
+      R.cache = null; R.clampCam();
+    };
+    resize();
+    addEventListener('resize', resize);
+    R.setState(state);
+    R.flugBereit = bereit;
+    const links = document.querySelector('.links');
+    const hud = new WeltHUD(game, document.getElementById('hud'));
+    links.append(hud.panel);
+    if (P.get('zoom')) R.zoomAt(innerWidth / 2, innerHeight / 2, +P.get('zoom'));
+    if (P.get('sel')) hud.zeige(ORTE.find(x => x.id === P.get('sel')));
+    if (P.get('center')) { const [x, y] = P.get('center').split(',').map(Number); R.centerOn(x, y); }
+    hud.refresh(true);
+    Object.assign(window, { R, hud, game });
+
+    // Steuerung: Ziehen = verschieben, Rad = zoomen, Klick = Ort wählen
+    let drag = null;
+    const pos = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); const [x, y] = pos(e); drag = { x, y, moved: 0 }; });
+    canvas.addEventListener('pointermove', e => {
+      const [x, y] = pos(e);
+      if (!drag) { R.hover = R.ortAt(x, y); canvas.style.cursor = R.hover ? 'pointer' : 'grab'; return; }
+      drag.moved += Math.hypot(x - drag.x, y - drag.y);
+      R.pan(x - drag.x, y - drag.y); drag.x = x; drag.y = y;
+    });
+    canvas.addEventListener('pointerup', e => {
+      const [x, y] = pos(e);
+      if (drag && drag.moved < 8) { const o = R.ortAt(x, y); R.selected = o?.id ?? null; hud.waehle(o); }
+      drag = null;
+    });
+    canvas.addEventListener('pointerleave', () => { if (!drag) R.hover = null; });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = pos(e); R.zoomAt(x, y, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+    addEventListener('keydown', e => { if (e.key === 'Escape') { R.selected = null; hud.waehle(null); } });
+
+    let last = performance.now(), frames = 0, ms = 0;
+    const phase = P.has('phase') ? +P.get('phase') : 0.3, regen = P.get('regen') === '1';
+    function loop(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      const t0 = performance.now();
+      R.frame(dt, { tagPhase: phase, regen });
+      ms += performance.now() - t0; frames++;
+      if (frames % 30 === 0) hud.refresh();
+      window.frameMs = ms / frames;
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

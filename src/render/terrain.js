@@ -1,6 +1,6 @@
 // Statisches Gelände: Erdschichten, Felsen, Wurzeln, Hügel, Gänge & Kammern (vorgerendert).
 import { TILE as T, COLS, ROWS, GROUND, HILL_X, C, GEBAEUDE, hillShape } from '../game/config.js';
-import { idx, get } from '../game/world.js';
+import { idx, get, raumMasse } from '../game/world.js';
 import { makeNoise, mulberry32, clamp } from '../util.js';
 import { drawRoomStatic } from './rooms.js';
 
@@ -176,8 +176,9 @@ export class Terrain {
   rebuild(state) {
     const world = state.world;
     let fertig = 0, idSum = 0;
-    for (const r of state.rooms) { idSum += r.id; if (r.bau >= 1) fertig++; }
-    const key = world.version + ':' + state.rooms.length + ':' + fertig + ':' + idSum;
+    let typen = '';
+    for (const r of state.rooms) { idSum += r.id; if (r.bau >= 1) fertig++; typen += r.typ[0] + r.typ.length; }
+    const key = world.version + ':' + state.rooms.length + ':' + fertig + ':' + idSum + ':' + typen;
     if (key === this.version) return false;
     this.version = key;
     const ctx = this.ctx;
@@ -195,7 +196,8 @@ export class Terrain {
     this.drawCarvings(ctx, state);
     for (const r of state.rooms) {
       const g = GEBAEUDE[r.typ];
-      drawRoomStatic(ctx, r, g, r.x * T, r.y * T, g.w * T, g.h * T, world);
+      const m = raumMasse(r);
+      drawRoomStatic(ctx, r, g, r.x * T, r.y * T, m.w * T, m.h * T, world);
     }
     return true;
   }
@@ -356,7 +358,8 @@ export class Terrain {
     for (const r of state.rooms) {
       const g = GEBAEUDE[r.typ];
       if (g.zone === 'oberflaeche') continue;
-      const rx = r.x * T, ry = r.y * T, rw = g.w * T, rh = g.h * T;
+      const m = raumMasse(r);
+      const rx = r.x * T, ry = r.y * T, rw = m.w * T, rh = m.h * T;
       const rad = Math.min(rh * 0.42, 26);
       outer.roundRect(rx + 1, ry + 1, rw - 2, rh - 2, rad + 4);
       inner.roundRect(rx + 5, ry + 5, rw - 10, rh - 10, rad);

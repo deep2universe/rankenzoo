@@ -4,7 +4,7 @@ import { Terrain, W, H, RES, hillSurfaceY } from './terrain.js';
 import { drawRoomDynamic, lampPositions, emoji } from './rooms.js';
 import { drawGlow } from './sprites.js';
 import { Agents } from './agents.js';
-import { canDig, canPlace, get, idx } from '../game/world.js';
+import { canDig, canPlace, get, idx, raumMasse } from '../game/world.js';
 import { mulberry32, clamp, lerp } from '../util.js';
 
 const SKY = [
@@ -289,7 +289,8 @@ export class Renderer {
     const brutVerteilung = this.verteileBrut(st);
     for (const r of st.rooms) {
       const g = GEBAEUDE[r.typ];
-      const rx = r.x * T, ry = r.y * T, rw = g.w * T, rh = g.h * T;
+      const m = raumMasse(r);
+      const rx = r.x * T, ry = r.y * T, rw = m.w * T, rh = m.h * T;
       if (rx > view.x1 || rx + rw < view.x0 || ry > view.y1 || ry + rh < view.y0) continue;
       if (r.bau >= 1 && g.zone !== 'oberflaeche') {
         // warmes Lampenlicht
@@ -314,7 +315,9 @@ export class Renderer {
     // Bau-Fortschritt & Warnungen
     for (const r of st.rooms) {
       const g = GEBAEUDE[r.typ];
-      const rx = r.x * T, ry = r.y * T, rw = g.w * T;
+      const m = raumMasse(r);
+      const rx = r.x * T, ry = r.y * T, rw = m.w * T, rh = m.h * T;
+      if (r.ausbau && r.bau >= 1) this.drawAusbau(ctx, r, rx, ry, rw, rh, t);
       if (r.bau < 1) {
         const bw = Math.min(70, rw - 16), bx = rx + (rw - bw) / 2, by = ry - 2;
         ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.beginPath(); ctx.roundRect(bx - 2, by - 2, bw + 4, 10, 5); ctx.fill();
@@ -348,11 +351,11 @@ export class Renderer {
     if (this.overlay.selected) {
       const r = st.rooms.find(rr => rr.id === this.overlay.selected);
       if (r) {
-        const g = GEBAEUDE[r.typ];
+        const m = raumMasse(r);
         ctx.strokeStyle = `rgba(255,230,120,${0.6 + 0.4 * Math.sin(t * 4)})`;
         ctx.lineWidth = 3 / z + 1;
         ctx.setLineDash([8, 6]);
-        ctx.beginPath(); ctx.roundRect(r.x * T + 1, r.y * T + 1, g.w * T - 2, g.h * T - 2, 14); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect(r.x * T + 1, r.y * T + 1, m.w * T - 2, m.h * T - 2, 14); ctx.stroke();
         ctx.setLineDash([]);
       }
     }
@@ -445,6 +448,27 @@ export class Renderer {
       ctx.fillStyle = '#333'; ctx.fillRect(-0.6, -3, 1.2, 7);
       ctx.restore();
     }
+  }
+
+  /** Ausbau läuft: Baugerüst, Kran-Haken und Fortschrittsbalken mit Ziel-Symbol. */
+  drawAusbau(ctx, r, rx, ry, rw, rh, t) {
+    const Z = GEBAEUDE[r.ausbau.ziel];
+    const p = r.ausbau.p;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(214,160,90,.85)'; ctx.lineWidth = 2;
+    for (let x = rx + 8; x <= rx + rw - 8; x += 22) { ctx.beginPath(); ctx.moveTo(x, ry + rh - 12); ctx.lineTo(x, ry + 8); ctx.stroke(); }
+    for (const y of [ry + 14, ry + rh * 0.55]) { ctx.beginPath(); ctx.moveTo(rx + 6, y); ctx.lineTo(rx + rw - 6, y); ctx.stroke(); }
+    ctx.strokeStyle = 'rgba(214,160,90,.5)'; ctx.lineWidth = 1;
+    for (let x = rx + 8; x < rx + rw - 22; x += 22) { ctx.beginPath(); ctx.moveTo(x, ry + 14); ctx.lineTo(x + 22, ry + rh * 0.55); ctx.stroke(); }
+    // schwingender Haken mit Baustein
+    const hx = rx + rw * 0.7 + Math.sin(t * 1.6) * 6, hy = ry + 10 + (1 + Math.sin(t * 0.9)) * 8;
+    ctx.strokeStyle = '#ddd'; ctx.beginPath(); ctx.moveTo(rx + rw * 0.7, ry + 6); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.fillStyle = '#c98a4a'; ctx.fillRect(hx - 4, hy, 8, 6);
+    ctx.restore();
+    const bw = Math.min(90, rw - 16), bx = rx + (rw - bw) / 2, by = ry - 4;
+    ctx.fillStyle = 'rgba(0,0,0,.6)'; ctx.beginPath(); ctx.roundRect(bx - 16, by - 4, bw + 20, 14, 7); ctx.fill();
+    ctx.fillStyle = '#7ee08a'; ctx.beginPath(); ctx.roundRect(bx, by, Math.max(4, bw * p), 6, 3); ctx.fill();
+    emoji(ctx, Z.icon, bx - 8, by + 8, 10);
   }
 
   verteileBrut(st) {
@@ -572,7 +596,7 @@ export class Renderer {
       ctx.lineWidth = 3 / z + 1;
       if (tt === C.ROOM) {
         const r = st.rooms.find(rr => rr.id === st.world.raum[idx(hx, hy)]);
-        if (r) { const g = GEBAEUDE[r.typ]; ctx.beginPath(); ctx.roundRect(r.x * T, r.y * T, g.w * T, g.h * T, 14); ctx.fill(); ctx.stroke(); }
+        if (r) { const m = raumMasse(r); ctx.beginPath(); ctx.roundRect(r.x * T, r.y * T, m.w * T, m.h * T, 14); ctx.fill(); ctx.stroke(); }
       } else if (tt === C.TUNNEL) {
         ctx.fillRect(hx * T, hy * T, T, T); ctx.strokeRect(hx * T, hy * T, T, T);
       }

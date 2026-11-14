@@ -3,16 +3,22 @@ import { GEBAEUDE, GROUND, TILE as T, COLS, hillUpgradeCost } from './game/confi
 import { newGame, load, save } from './game/state.js';
 import { tick, derive, refreshConnectivity, hochzeitsflugBereit } from './game/sim.js';
 import { digCell, placeBuilding, demolishAt, upgradeHill, hochzeitsflug, grantPlan } from './game/actions.js';
-import { get, idx, hillTop } from './game/world.js';
+import { ausbauen, neuBaubar, zufallsPlan } from './game/bauplaene.js';
+import { WeltRenderer } from './render/weltRenderer.js';
+import { openHochzeitsflug } from './ui/hochzeitsflug.js';
+import { openBauplanBuch } from './ui/bauplanBuch.js';
+import { AmeisenKarte } from './ui/ameisenKarte.js';
+import { ortById, kolonieAn, flugParameter } from './game/welt.js';
+import { aktuelleStunde } from './quiz/stundenplan.js';
+import { ereignisFuerEinige, tagesEreignis } from './game/buerger.js';
+import { get, idx, hillTop, raumMasse } from './game/world.js';
 import { pruefeMissionen } from './game/missions.js';
 import { C } from './game/config.js';
 import { Renderer } from './render/renderer.js';
 import { RevierRenderer } from './render/revierRenderer.js';
-import { sendeExpedition, setzeTrupp, handeln, revierBedarf } from './game/revier.js';
+import { sendeExpedition, setzeTrupp, handeln, revierBedarf, baueLager, lagerAusbauen, lagerTyp } from './game/revier.js';
 import { TECHS } from './game/forschung.js';
-import { QUELLEN, STOERER, SIM } from './game/config.js';
-import { verfuegbarePlaene } from './game/actions.js';
-import { pick } from './util.js';
+import { QUELLEN, STOERER, SIM, FAECHER, FUNDE } from './game/config.js';
 import { HUD } from './ui/hud.js';
 import { openQuiz } from './ui/quiz.js';
 import { openMinigames } from './ui/minigames.js';
@@ -28,29 +34,38 @@ import { h } from './util.js';
 const canvas = document.getElementById('welt');
 const renderer = new Renderer(canvas);
 const revierR = new RevierRenderer(canvas);
+const weltR = new WeltRenderer(canvas);
+const MODI = ['nest', 'revier', 'welt'];
 
 const game = {
-  state: null, d: null, renderer, revierR, hud: null, tool: null, buildTyp: null, pausen: 0,
+  state: null, d: null, renderer, revierR, weltR, hud: null, tool: null, buildTyp: null, pausen: 0, beobachtung: false,
   digging: null, lastDigCell: null, hinweisZeit: {},
   modus: 'nest', uebergang: null, lastInput: 0,
 
   /** Merkt sich Benutzer-Aktivität (für die Bildrate). */
   poke() { this.lastInput = performance.now(); },
-  aktiverRenderer() { return this.modus === 'revier' ? revierR : renderer; },
+  aktiverRenderer() { return this.modus === 'revier' ? revierR : this.modus === 'welt' ? weltR : renderer; },
+  /** Bildschirm-Position des Heimatnests in einer Ansicht (für die Iris-Überblendung). */
+  nestPunkt(modus) {
+    if (modus === 'revier') return revierR.nestScreen();
+    if (modus === 'welt') return weltR.nestScreen();
+    return renderer.worldToScreen(30.5 * T, hillTop(this.state.world) * T);
+  },
 
-  /** Shift: zwischen Nest (Bauen) und Revier (Befehlen) wechseln. */
+  /** Shift: Nest (bauen) → Revier (befehlen) → Welt (Hochzeitsflug) → Nest. */
   wechsleModus(ziel) {
-    ziel ??= this.modus === 'nest' ? 'revier' : 'nest';
+    ziel ??= MODI[(MODI.indexOf(this.modus) + 1) % MODI.length];
     if (ziel === this.modus || this.uebergang || !this.hud) return;
     if (this.modalOffen()) return;
     // Bild der alten Ansicht für die Überblendung festhalten
     const snap = document.createElement('canvas');
     snap.width = canvas.width; snap.height = canvas.height;
     snap.getContext('2d').drawImage(canvas, 0, 0);
-    const vonNest = this.modus === 'nest';
-    const [ax, ay] = vonNest ? renderer.worldToScreen((30.5) * T, hillTop(this.state.world) * T) : revierR.nestScreen();
+    const [ax, ay] = this.nestPunkt(this.modus);
+    const vonModus = this.modus;
     this.setTool(null, null, true);
     revierR.tool = null;
+    this.ameisenKarte?.schliesse();
     this.modus = ziel;
     if (ziel === 'revier') {
       revierR.maxDpr = renderer.maxDpr;
@@ -58,17 +73,100 @@ const game = {
       revierR.focusNest();
       if (!this.state.revier.besucht) {
         this.state.revier.besucht = true;
-        setTimeout(() => toast('Willkommen im Revier! Tippe auf eine Futterquelle und schicke Sammlerinnen hin. Mit 🔭 Erkunden lüftest du den Nebel. Shift ⇧ bringt dich zurück ins Nest.', { icon: '🗺️', art: 'gold', dauer: 8000 }), 900);
+        setTimeout(() => toast('Willkommen im Revier! Tippe auf eine Futterquelle und schicke Sammlerinnen hin. Mit 🔭 Erkunden lüftest du den Nebel. Shift ⇧ bringt dich weiter zur Weltkarte.', { icon: '🗺️', art: 'gold', dauer: 8000 }), 900);
+      } else if (this.state.revier.gewachsen) {
+        this.state.revier.gewachsen = false;
+        setTimeout(() => toast('Das Revier ist viel größer geworden! Im Nebel warten neue Blumenwiesen 🌸 und geheimnisvolle Fundstücke ✨.', { icon: '🗺️', art: 'gold', dauer: 7000 }), 900);
       }
       this.state.stats.revierBesuche++;
+    } else if (ziel === 'welt') {
+      weltR.maxDpr = renderer.maxDpr;
+      if (weltR.state !== this.state) weltR.setState(this.state);
+      weltR.focusNest();
+      if (!this.state.welt.besucht) {
+        this.state.welt.besucht = true;
+        setTimeout(() => toast('Die Weltkarte! Hier suchst du Orte für neue Kolonien. Ist dein Volk bereit, startet von hier der Hochzeitsflug.', { icon: '🌍', art: 'gold', dauer: 7000 }), 900);
+      }
     } else renderer.focusHome();
-    this.uebergang = { t: 0, dauer: 0.85, snap, ax, ay, ziel };
-    document.body.classList.toggle('modus-revier', ziel === 'revier');
+    this.uebergang = { t: 0, dauer: 0.85, snap, ax, ay, ziel, von: vonModus };
+    for (const mo of MODI) document.body.classList.toggle('modus-' + mo, ziel === mo && mo !== 'nest');
     document.body.classList.add('modus-wechsel');
     setTimeout(() => document.body.classList.remove('modus-wechsel'), 900);
     sfx.whoosh();
     this.hud.modusGewechselt?.();
     this.poke();
+  },
+
+  // ---------- Welt & Hochzeitsflug ----------
+  hochzeitsflugStatus() { return hochzeitsflugBereit(this.state, this.d); },
+  weltClick(sx, sy) {
+    const o = weltR.ortAt(sx, sy);
+    weltR.selected = o?.id ?? null;
+    this.hud.welt?.waehle(o);
+    if (o) sfx.click();
+  },
+  weltHover(sx, sy) { weltR.hover = weltR.ortAt(sx, sy); },
+  async starteHochzeitsflug(ortId) {
+    const ort = ortById(ortId);
+    if (!ort || this.modalOffen()) return;
+    if (kolonieAn(this.state, ortId)) { toast('Dort wohnt schon eure Tochterkolonie!', { icon: ort.icon }); return; }
+    const b = this.hochzeitsflugStatus();
+    if (!b.ok) { sfx.error(); toast('Noch nicht bereit: ' + b.gruende[0], { icon: '🪽', art: 'warn', dauer: 5000 }); return; }
+    this.state.welt.versuche = (this.state.welt.versuche ?? 0) + 1;
+    const p = flugParameter(this.state, ort);
+    const erg = await openHochzeitsflug(this, { ...p, koloniename: this.state.spieler.koloniename });
+    if (!erg?.erfolg) { this.hud.welt?.refresh(true); return; }
+    const r = hochzeitsflug(this.state, ortId);
+    weltR.selected = ortId;
+    weltR.centerOn(ort.x, ort.y);
+    this.hud.welt?.waehle(ort);
+    this.hud.welt?.refresh(true);
+    this.save();
+    return r;
+  },
+  nachBauplan(typ) {
+    const G = GEBAEUDE[typ];
+    if (G.zone === 'revier') { this.wechsleModus('revier'); setTimeout(() => this.hud.revier?.zeltWerkzeug(), 950); return; }
+    if (neuBaubar(typ)) { if (this.modus !== 'nest') this.wechsleModus('nest'); this.selectPlan(typ); return; }
+    const kandidat = this.state.rooms.find(r => r.typ === G.vorige && r.bau >= 1 && !r.ausbau);
+    if (this.modus !== 'nest') this.wechsleModus('nest');
+    if (kandidat) {
+      const m = raumMasse(kandidat);
+      renderer.centerOn((kandidat.x + m.w / 2) * T, (kandidat.y + m.h / 2) * T);
+      renderer.overlay.selected = kandidat.id;
+      setTimeout(() => roomInfo(this, kandidat), 400);
+    } else toast(`Baue zuerst ${GEBAEUDE[G.vorige].name} – dann kannst du es zu ${G.name} ausbauen.`, { icon: G.icon, art: 'gold', dauer: 5000 });
+  },
+  ausbauen(room) {
+    const r = ausbauen(this.state, room, this.d.fx);
+    if (!r.ok) { sfx.error(); toast(r.grund, { icon: '⬆️', art: 'warn' }); return; }
+    sfx.place();
+    const m = raumMasse(room);
+    renderer.spawnParticles((room.x + m.w / 2) * T, (room.y + m.h / 2) * T, 'staub', 24);
+    toast(`Ausbau gestartet: ${GEBAEUDE[room.typ].name} → ${GEBAEUDE[r.ziel].name}. Das Gebäude arbeitet währenddessen weiter.`, { icon: GEBAEUDE[r.ziel].icon, art: 'gut', dauer: 4500 });
+    this.save();
+  },
+  schulStatus() {
+    if (!this.state?.schule) return null;
+    const st = aktuelleStunde(this.state);
+    return { ...st, fachIcon: st.fach ? FAECHER[st.fach].icon : '', fachName: st.fach ? FAECHER[st.fach].name : '' };
+  },
+  toggleBeobachtung(an) {
+    this.beobachtung = an ?? !this.beobachtung;
+    renderer.agents.lupe = this.beobachtung;
+    if (this.beobachtung && this.modus !== 'nest') this.wechsleModus('nest');
+    if (this.beobachtung) { this.setTool(null, null, true); canvas.classList.add('tool-lupe'); this.hud.zeigeHinweis('🔍 Ameisen-Beobachtung: Tippe auf eine Ameise und lerne sie kennen! (B oder 🔍 zum Beenden)', '', 5000); }
+    else { canvas.classList.remove('tool-lupe'); this.ameisenKarte?.schliesse(); this.hud.versteckeHinweis(); }
+    sfx.click();
+    this.hud.update(this.d);
+  },
+  openBauplanBuch() { if (!modalOffen()) openBauplanBuch(this); },
+  hinweisToast(text, icon = '💡') { toast(text, { icon, art: 'warn', dauer: 5000 }); sfx.error(); },
+  lagerAusbauen(l) {
+    const r = lagerAusbauen(this.state, l);
+    if (!r.ok) { sfx.error(); toast(r.grund, { icon: '⛺', art: 'warn' }); return; }
+    sfx.place(); toast(`Das Lager wird zu ${GEBAEUDE[lagerTyp(l)].name} ausgebaut!`, { icon: GEBAEUDE[lagerTyp(l)].icon, art: 'gut' });
+    this.hud.revier?.refresh(true); this.save();
   },
 
   // ---------- Revier-Befehle ----------
@@ -96,13 +194,26 @@ const game = {
   },
   revierClick(sx, sy) {
     const q = revierR.quelleAt(sx, sy);
+    if (revierR.tool === 'zelt') {
+      const [cx, cy] = revierR.cellAt(sx, sy);
+      const r = baueLager(this.state, cx, cy);
+      if (!r.ok) { sfx.error(); toast(r.grund, { icon: '⛺', art: 'warn' }); return; }
+      sfx.place(); revierR.tool = null;
+      toast('Zelt wird aufgestellt! Die Erkunderinnen bauen es selbst auf.', { icon: '⛺', art: 'gut' });
+      this.hud.revier?.waehleLager(r.lager);
+      this.save();
+      return;
+    }
     if (revierR.tool === 'exp') {
       const [cx, cy] = revierR.cellAt(sx, sy);
       if (this.expedition(cx, cy, this.hud.revier?.expGroesse ?? 2)) { revierR.tool = null; this.hud.revier?.refresh(true); }
       return;
     }
+    const lager = !q ? revierR.lagerAt(sx, sy) : null;
+    if (lager) { sfx.click(); this.hud.revier?.waehleLager(lager); return; }
     revierR.selected = q?.id ?? null;
     this.hud.revier?.waehle(q);
+    if (!q) this.hud.revier?.waehleLager(null);
     if (q) sfx.click();
   },
   revierHover(sx, sy) {
@@ -115,7 +226,8 @@ const game = {
   modalKey(e) { const m = topModal(); return m?._key ? !!m._key(e) : false; },
 
   setTool(tool, typ = null, still = false) {
-    if (this.modus === 'revier' && tool) this.wechsleModus('nest');
+    if (this.modus !== 'nest' && tool) this.wechsleModus('nest');
+    if (tool && this.beobachtung) this.toggleBeobachtung(false);
     this.tool = tool; this.buildTyp = tool === 'bauen' ? typ : null;
     renderer.overlay.tool = tool; renderer.overlay.typ = this.buildTyp;
     canvas.className = tool ? 'tool-' + tool : '';
@@ -134,7 +246,7 @@ const game = {
     this.setTool('bauen', typ);
   },
   zoom(f) { const R = this.aktiverRenderer(); R.zoomAt(R.vw / 2, R.vh / 2, f); this.poke(); },
-  focusHome() { if (this.modus === 'revier') revierR.focusNest(); else renderer.focusHome(); this.poke(); },
+  focusHome() { if (this.modus === 'revier') revierR.focusNest(); else if (this.modus === 'welt') weltR.focusNest(); else renderer.focusHome(); this.poke(); },
   toggleTempo() { this.state.einstellungen.tempo = this.state.einstellungen.tempo === 2 ? 1 : 2; sfx.click(); },
 
   startDig() { this.digging = new Set(); this.lastDigCell = null; this.digFehler = null; },
@@ -171,7 +283,6 @@ const game = {
     sfx.place();
     renderer.spawnParticles((ax + g.w / 2) * T, (ay + g.h / 2) * T, 'staub', 22);
     this.hud.zeigeHinweis(`🏗️ Baustelle eröffnet! Deine Arbeiterinnen bauen ${g.name === 'Universität' ? 'die' : 'die Kammer'} ${g.name}.${r.room.ersetzt.length ? ` (+${r.room.ersetzt.length} Gangstücke zurück)` : ''}`, 'ok', 3500);
-    if (!this.state.plaene[this.buildTyp]) this.setTool(null);
     this.hud.planSig = '';
     this.save();
   },
@@ -193,8 +304,14 @@ const game = {
     else if (r.grund) toast(r.grund, { icon: '❌', art: 'warn' });
   },
   hover() {},
-  clickWorld(cell) {
+  clickWorld(cell, sx, sy) {
     const [x, y] = cell;
+    // Ameisen-Beobachtung: zuerst nach einer Ameise suchen (großzügig, damit Kinderfinger treffen)
+    if (this.beobachtung) {
+      const [wx, wy] = sx != null ? renderer.screenToWorld(sx, sy) : [(x + 0.5) * T, (y + 0.5) * T];
+      const ant = renderer.agents.hit(wx, wy, 16 / Math.min(1.5, renderer.cam.z));
+      if (ant?.bid) { sfx.pop(); this.ameisenKarte.zeige(ant.bid); return; }
+    }
     const t = get(this.state.world, x, y);
     if (t === C.ROOM) {
       const id = this.state.world.raum[idx(x, y)];
@@ -202,9 +319,10 @@ const game = {
       if (room) { renderer.overlay.selected = id; roomInfo(this, room); return; }
     }
     renderer.overlay.selected = null;
-    const [wx, wy] = renderer.screenToWorld(...renderer.worldToScreen((x + 0.5) * T, (y + 0.5) * T));
-    const ant = renderer.agents.hit(wx, wy);
+    const [wx, wy] = sx != null ? renderer.screenToWorld(sx, sy) : [(x + 0.5) * T, (y + 0.5) * T];
+    const ant = renderer.agents.hit(wx, wy, 12);
     if (ant) {
+      if (ant.bid) { this.toggleBeobachtung(true); this.ameisenKarte.zeige(ant.bid); return; }
       const jobs = { sammler: 'Sammlerin – holt Futter von draußen', bau: 'Bauarbeiterin – baut neue Kammern', amme: 'Amme – pflegt Eier, Larven und Puppen', drohne: 'Drohne – männliche Ameise mit Flügeln, wartet auf den Hochzeitsflug' };
       const room = ant.roomId && this.state.rooms.find(r => r.id === ant.roomId);
       const txt = ant.job === 'personal' && room ? `${GEBAEUDE[room.typ].beruf?.name} in: ${GEBAEUDE[room.typ].name}` : jobs[ant.job];
@@ -216,11 +334,7 @@ const game = {
     if (!r.ok) { sfx.error(); toast(r.grund, { icon: '⛰️', art: 'warn' }); return; }
     this.hud.panelSig = '';
   },
-  hochzeitsflug() {
-    const b = hochzeitsflugBereit(this.state, this.d);
-    if (!b.ok) return;
-    hochzeitsflug(this.state);
-  },
+  hochzeitsflug() { this.wechsleModus('welt'); },
   derive() { return derive(this.state); },
   openForschung() { if (!modalOffen()) openForschung(this); },
   openArchiv() { if (!modalOffen()) import('./ui/archiv.js').then(m => m.openFragenArchiv(this)).catch(() => toast('Das Fragen-Archiv ist noch nicht da.', { icon: '🗂️' })); },
@@ -242,22 +356,53 @@ function throttleToast(key, sek, text, opts) {
 }
 on('gebaut', r => {
   const g = GEBAEUDE[r.typ];
+  const m = raumMasse(r);
   sfx.built();
-  renderer.spawnParticles((r.x + g.w / 2) * T, (r.y + g.h / 2) * T, 'stern', 18);
+  renderer.spawnParticles((r.x + m.w / 2) * T, (r.y + m.h / 2) * T, 'stern', 18);
   toast(`${g.name} ist fertig!`, { icon: g.icon, art: 'gut' });
+  ereignisFuerEinige(game.state, 2, `hat beim Bau von ${g.name} mitgeholfen 🏗️`);
   game.save();
 });
 on('ausgewandert', grund => throttleToast('aus', 20, grund === 'hunger' ? 'Hunger! Eine Ameise ist ausgewandert. Sorge für Nahrung (Denksport bringt Futter)!' : 'Dein Volk ist unglücklich – eine Ameise ist ausgewandert.', { icon: '😢', art: 'warn', dauer: 4500 }));
 on('hinweis', x => throttleToast(x.id, 90, x.text, { icon: '💡', dauer: 4500 }));
-on('neuerTag', x => { toast(`Ein neuer Ameisentag beginnt: Tag ${x.tag}${x.joker ? ` · +${x.joker} Joker aus der Buchhandlung` : ''}`, { icon: '🌅' }); game.save(); });
+on('neuerTag', x => {
+  toast(`Ein neuer Ameisentag beginnt: Tag ${x.tag}${x.joker ? ` · +${x.joker} Joker aus der Buchhandlung` : ''}`, { icon: '🌅' });
+  tagesEreignis(game.state);
+  // Neuer Schultag?
+  const st = aktuelleStunde(game.state);
+  if (st.neuerTag && st.fach) setTimeout(() => toast(`${st.neueWoche ? 'Eine neue Schulwoche! ' : ''}Neuer Schultag: ${['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'][st.wtag]} – 1. Stunde ${FAECHER[st.fach].icon} ${FAECHER[st.fach].name}. Ab in die Schule! 🎒`, { icon: '🔔', art: 'gold', dauer: 5500 }), 1200);
+  // Tochterkolonien schicken Grüße
+  const kol = game.state.welt?.kolonien ?? [];
+  if (kol.length && Math.random() < 0.5) {
+    const k = kol[Math.floor(Math.random() * kol.length)];
+    const geschenk = 10 + 5 * kol.length;
+    game.state.res.nahrung += geschenk;
+    setTimeout(() => toast(`Grüße aus ${k.name}! Eure Tochterkolonie schickt ${geschenk} 🍯.`, { icon: ortById(k.ort)?.icon ?? '🏡', art: 'gut', dauer: 4500 }), 2600);
+  }
+  game.save();
+});
 on('huegel', lvl => { sfx.fanfare(); konfetti(30); toast(`Der Ameisenhügel ist gewachsen: Stufe ${lvl}!`, { icon: '⛰️', art: 'gold' }); game.save(); });
 on('hochzeitsflug', x => {
   sfx.fanfare(); konfetti(60);
   const top = hillTop(game.state.world);
   renderer.agents.startFlight(30.5 * T, top * T, 28);
-  renderer.centerOn(30.5 * T, (top - 3) * T);
-  toast(`Hochzeitsflug! Eine neue Kolonie wurde gegründet. +${x.sterne} ⭐ und ein Bauplan: ${GEBAEUDE[x.plan].name}. Kronenstufe ${x.stufe}!`, { icon: '🪽', art: 'gold', dauer: 6000 });
+  toast(`Hochzeitsflug geglückt! ${x.kolonie ? `„${x.kolonie.name}" wurde ${x.ort ? `bei ${x.ort.name} ` : ''}gegründet. ` : ''}+${x.sterne} ⭐${x.plan ? ` und ein Bauplan: ${GEBAEUDE[x.plan].name}` : ''}. Kronenstufe ${x.stufe}!${x.ort ? ` Bonus: ${x.ort.bonusText}.` : ''}`, { icon: '🪽', art: 'gold', dauer: 7000 });
+  ereignisFuerEinige(game.state, 4, `hat beim Hochzeitsflug nach ${x.ort?.name ?? 'draußen'} gewunken und gejubelt 🪽`);
   game.save();
+});
+on('ausgebaut', r => {
+  const g = GEBAEUDE[r.typ];
+  const m = raumMasse(r);
+  sfx.built(); konfetti(20);
+  renderer.spawnParticles((r.x + m.w / 2) * T, (r.y + m.h / 2) * T, 'stern', 26);
+  toast(`Ausbau fertig: ${g.name}! Stufe ${g.lstufe} von ${g.lmax}.`, { icon: g.icon, art: 'gold', dauer: 4500 });
+  ereignisFuerEinige(game.state, 2, `hat beim Ausbau zu ${g.name} kräftig mitgeholfen 🏗️`);
+  game.save();
+});
+on('lagerFertig', l => { sfx.built(); toast(`${GEBAEUDE[lagerTyp(l)].name} steht! Der Nebel ringsum hat sich gelichtet.`, { icon: GEBAEUDE[lagerTyp(l)].icon, art: 'gut' }); game.save(); });
+on('testEnde', x => {
+  if (x.plan) ereignisFuerEinige(game.state, 3, `hat sich riesig über den neuen Bauplan „${GEBAEUDE[x.plan].name}" gefreut 🎉`);
+  else if (x.perfekt) ereignisFuerEinige(game.state, 1, 'hat gehört, dass die Königin einen perfekten Test geschrieben hat, und war mächtig stolz 🏆');
 });
 on('geschluepft', k => {
   const q = game.state.rooms.find(r => r.typ === 'koenigin');
@@ -283,13 +428,19 @@ on('quelleEntdeckt', q => {
 });
 on('expHeim', e => {
   if (e.fund?.plan) {
-    const p = pick(verfuegbarePlaene(game.state));
-    if (p) { grantPlan(game.state, p); e.fund.planTyp = p; }
+    const p = zufallsPlan(game.state, 'schatz');
+    if (p) e.fund.planTyp = p; else game.state.res.sterne += 25;
   }
   const f = e.fund;
-  if (!f) toast('Die Expedition ist zurück – diesmal ohne Fund, aber mit neuen Eindrücken.', { icon: '🚩' });
-  else if (f.klein) toast(`Expedition zurück! Fundstücke: +${f.sterne} ⭐${f.material ? ` +${f.material} 🪵` : ''}`, { icon: '🚩', art: 'gut' });
-  else { sfx.fanfare(); konfetti(40); toast(`Schatz gefunden! +${f.sterne} ⭐ +${f.material} 🪵${f.planTyp ? ` und ein Bauplan: ${GEBAEUDE[f.planTyp].name} ${GEBAEUDE[f.planTyp].icon}` : ''}${f.joker ? ' und ein Joker 🃏' : ''}`, { icon: '🎁', art: 'gold', dauer: 6000 }); }
+  if (e.fundstueck && FUNDE[e.fundstueck]) {
+    const F = FUNDE[e.fundstueck];
+    sfx.fanfare(); konfetti(25);
+    const lohn = Object.entries(F.lohn).map(([k, v]) => `+${v} ${{ sterne: '⭐', material: '🪵', fp: '🔬', nahrung: '🍯', joker: '🃏' }[k]}`).join(' ');
+    toast(`Fundstück: ${F.name}! ${F.text} ${lohn}`, { icon: F.icon, art: 'gold', dauer: 7500 });
+    ereignisFuerEinige(game.state, 2, `hat das Fundstück „${F.name}" bestaunt ${F.icon}`);
+  } else if (!f) toast('Die Expedition ist zurück – diesmal ohne Fund, aber mit neuen Eindrücken.', { icon: '🚩' });
+  if (f && f.klein) toast(`Expedition zurück! Fundstücke: +${f.sterne} ⭐${f.material ? ` +${f.material} 🪵` : ''}`, { icon: '🚩', art: 'gut' });
+  else if (f) { sfx.fanfare(); konfetti(40); toast(`Schatz gefunden! +${f.sterne} ⭐ +${f.material} 🪵${f.planTyp ? ` und ein Bauplan: ${GEBAEUDE[f.planTyp].name} ${GEBAEUDE[f.planTyp].icon}` : ''}${f.joker ? ' und ein Joker 🃏' : ''}`, { icon: '🎁', art: 'gold', dauer: 6000 }); }
   game.hud.planSig = '';
   game.save();
 });
@@ -319,10 +470,12 @@ function begin(state, neu) {
   wendeGrafikAn(state.einstellungen.grafik);
   renderer.setState(state);
   revierR.setState(state);
+  weltR.setState(state);
   game.d = derive(state);
   configureAudio(state.einstellungen);
   document.getElementById('hud').hidden = false;
   game.hud = new HUD(game);
+  game.ameisenKarte = new AmeisenKarte(game, document.getElementById('hud'));
   setupInputOnce();
   startMusic();
   game.hud.update(game.d);
@@ -388,7 +541,9 @@ const loop = {
     inputCtl?.update(dt);
     const t0 = performance.now();
     const fdt = game.pausen ? dt * 0.3 : dt;
-    if (game.modus === 'revier') revierR.frame(fdt, game.d); else renderer.frame(fdt, game.d);
+    if (game.modus === 'revier') revierR.frame(fdt, game.d);
+    else if (game.modus === 'welt') { weltR.flugBereit = !!game.d && hochzeitsflugBereit(st, game.d).ok; weltR.frame(fdt, game.d); }
+    else renderer.frame(fdt, game.d);
     if (game.uebergang) zeichneUebergang(dt);
     // Automatisch sparsamer werden, wenn das Zeichnen dauerhaft zu lange braucht
     const ms = performance.now() - t0;
@@ -406,7 +561,7 @@ const loop = {
         toast('Du spielst schon 25 Minuten – Zeit für eine kleine Bewegungspause! Dein Ameisenstaat wartet auf dich. 🤸', { icon: '⏰', art: 'gold', dauer: 9000 });
       }
       this.hudT -= dt; this.missT -= dt;
-      if (this.hudT <= 0) { this.hudT = 0.25; game.hud.update(game.d); }
+      if (this.hudT <= 0) { this.hudT = 0.25; game.hud.update(game.d); game.ameisenKarte?.update(); }
       if (this.missT <= 0) {
         this.missT = 0.6;
         for (const m of pruefeMissionen(st, game.d)) belohneMission(m);
@@ -424,7 +579,7 @@ function zeichneUebergang(dt) {
   const ctx = canvas.getContext('2d');
   const k = canvas.width / (canvas.clientWidth || window.innerWidth);
   const W = canvas.width, H = canvas.height;
-  const [nx, ny] = (u.ziel === 'revier' ? revierR.nestScreen() : renderer.worldToScreen(30.5 * T, hillTop(game.state.world) * T)).map(v => v * k);
+  const [nx, ny] = game.nestPunkt(u.ziel).map(v => v * k);
   const maxR = Math.hypot(Math.max(nx, W - nx), Math.max(ny, H - ny));
   const r = e * maxR * 1.05;
   ctx.save();
@@ -434,7 +589,8 @@ function zeichneUebergang(dt) {
   const s = 1 + e * 0.35;
   const ax = u.ax * k, ay = u.ay * k;
   ctx.translate(ax, ay);
-  if (u.ziel === 'revier') ctx.transform(s, 0, 0, s * (1 - e * 0.45), 0, 0); else ctx.scale(s, s);
+  const raus = MODI.indexOf(u.ziel) > MODI.indexOf(u.von); // weiter hinaus = kippen & schrumpfen
+  if (raus) ctx.transform(s, 0, 0, s * (1 - e * 0.45), 0, 0); else ctx.scale(s, s);
   ctx.translate(-ax, -ay);
   ctx.globalAlpha = 1 - e * 0.35;
   ctx.drawImage(u.snap, 0, 0);
@@ -466,6 +622,6 @@ function belohneMission(m) {
   game.save();
 }
 
-window.addEventListener('resize', () => { renderer.resize(); revierR.cache = null; revierR.clampCam(); game.poke(); });
+window.addEventListener('resize', () => { renderer.resize(); revierR.cache = null; revierR.clampCam(); weltR.cache = null; weltR.clampCam?.(); game.poke(); });
 window.__ameisenreich = game; // für Tests & Neugierige
 boot();
