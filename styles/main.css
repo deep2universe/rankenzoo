@@ -187,7 +187,7 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 .zoom-tools { position: absolute; right: 12px; top: 66px; display: flex; flex-direction: column; gap: 8px; }
 
 /* ---------- Toasts ---------- */
-#toasts { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
+#toasts { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 110; display: flex; flex-direction: column; gap: 8px; align-items: center; pointer-events: none; }
 .toast {
   display: flex; align-items: center; gap: 10px; padding: 10px 18px; border-radius: 16px; background: rgba(30,20,10,.92); color: var(--text);
   box-shadow: var(--shadow); font-weight: 600; animation: toastIn .35s cubic-bezier(.3,1.5,.6,1), toastOut .4s ease-in forwards; animation-delay: 0s, var(--dauer, 3s);
@@ -202,7 +202,7 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 
 /* ---------- Modal ---------- */
 .modal-bg {
-  position: fixed; inset: 0; z-index: 40; background: rgba(15,8,3,.68); display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 105; background: rgba(15,8,3,.68); display: grid; place-items: center;
   animation: fadeIn .25s; padding: 14px;
 }
 .modal-bg.weg { animation: fadeOut .2s forwards; }
@@ -331,7 +331,7 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 .feedback .erk b { color: #1f6b30; }
 .feedback .weiter-reihe { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
 .tipp-box { background: #eef6ff; border-radius: 14px; padding: 10px 14px; margin: 0 0 12px; font-size: .95rem; color: #1d3f6b; animation: popIn .25s; }
-.sterne-flug { position: fixed; z-index: 80; font-size: 26px; pointer-events: none; animation: fliegen .9s cubic-bezier(.5,0,.8,.5) forwards; }
+.sterne-flug { position: fixed; z-index: 120; font-size: 26px; pointer-events: none; animation: fliegen .9s cubic-bezier(.5,0,.8,.5) forwards; }
 @keyframes fliegen { to { transform: translate(var(--dx), var(--dy)) scale(.5); opacity: .3; } }
 
 /* Ergebnis & Truhe */
@@ -443,6 +443,7 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 .tabs button.an { background: var(--honig); color: #3b2300; box-shadow: 0 3px 0 #c98a00; }
 
 /* ---------- Startbildschirm ---------- */
+/* Ebenen: HUD 10 · Startbildschirm 100 · Fenster 105 (auch über dem Startbildschirm, z. B. „Neues Spiel?") · Toasts 110 · Tooltip 115 · Sterne/Konfetti 120+ */
 #start { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; overflow: auto; }
 #start:empty { display: none; }
 .start-bg { position: fixed; inset: 0; background: radial-gradient(ellipse at 50% 20%, rgba(255,210,120,.25), transparent 60%), linear-gradient(180deg, rgba(30,18,8,.35), rgba(30,18,8,.85)); }
@@ -464,7 +465,7 @@ body::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-i
 .pulse-hinweis { animation: hinweisPuls 1.2s infinite !important; }
 @keyframes hinweisPuls { 50% { box-shadow: 0 0 0 6px rgba(255,107,155,.85), 0 0 24px 8px rgba(255,107,155,.5); } }
 
-.konfetti { position: fixed; top: -20px; z-index: 90; pointer-events: none; font-size: 22px; animation: fallen linear forwards; }
+.konfetti { position: fixed; top: -20px; z-index: 125; pointer-events: none; font-size: 22px; animation: fallen linear forwards; }
 @keyframes fallen { to { transform: translateY(110vh) rotate(720deg); } }
 
 /* ---------- Responsiv ---------- */
