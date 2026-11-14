@@ -1,9 +1,10 @@
 // Sichtbare Ameisen, die wirklich durch die Gänge laufen.
 import { TILE as T, COLS, GROUND, C, GEBAEUDE } from '../game/config.js';
-import { findPath, walkable, get, idx, isSurfaceWalk } from '../game/world.js';
+import { findPath, walkable, get, idx, isSurfaceWalk, raumMasse } from '../game/world.js';
 import { hillSurfaceY } from './terrain.js';
 import { drawAntFast as drawAnt, drawEmoji } from './sprites.js';
 import { pick, rand, randInt } from '../util.js';
+import { holeBuerger, buergerById } from '../game/buerger.js';
 
 const MAX_SICHTBAR = 90;
 let nextId = 1;
@@ -40,7 +41,7 @@ export class Agents {
       this._roomsRef = state.rooms; this._roomsLen = state.rooms.length;
       this._roomInfo = new Map();
       for (const r of state.rooms) {
-        const g = GEBAEUDE[r.typ];
+        const g = { ...GEBAEUDE[r.typ], ...raumMasse(r) };
         this._roomInfo.set(r.id, { id: r.id, typ: r.typ, x: r.x, y: r.y, w: g.w, h: g.h, zone: g.zone });
       }
     }
@@ -83,6 +84,10 @@ export class Agents {
       else next.push(this.spawn(state, w));
     }
     this.list = next.filter(Boolean);
+    // Jede sichtbare Ameise ist eine bestimmte Bürgerin (oder Drohne) mit Namen und Geschichte
+    const belegt = new Set();
+    for (const a of this.list) if (a.bid && !belegt.has(a.bid) && buergerById(state, a.bid)) belegt.add(a.bid); else a.bid = null;
+    for (const a of this.list) if (!a.bid) { a.bid = holeBuerger(state, a.rolle === 'drohne', belegt); belegt.add(a.bid); }
   }
 
   spawn(state, w) {
@@ -90,7 +95,7 @@ export class Agents {
     let start = queen;
     if (w.roomId) start = state.rooms.find(r => r.id === w.roomId) ?? queen;
     if (!start) return null;
-    const g = GEBAEUDE[start.typ];
+    const g = raumMasse(start);
     const cx = start.x + randInt(0, g.w - 1), cy = start.y + g.h - 1;
     const [x, y] = this.cellPos(state, cx, cy);
     return {
@@ -105,7 +110,7 @@ export class Agents {
   decide(a, state) {
     const rooms = state.rooms.filter(r => r.verbunden !== false);
     const roomCell = (r, bottom = true) => {
-      const g = GEBAEUDE[r.typ];
+      const g = raumMasse(r);
       return [r.x + randInt(0, g.w - 1), bottom ? r.y + g.h - 1 : r.y + randInt(0, g.h - 1)];
     };
     let target = null;
@@ -255,6 +260,22 @@ export class Agents {
       if (a.hidden > 0) continue;
       if (a.x < view.x0 - 30 || a.x > view.x1 + 30 || a.y < view.y0 - 30 || a.y > view.y1 + 30) continue;
       const working = !a.path && a.job === 'bau' && a.wait > 0;
+      if (this.lupe) {
+        // Beobachtungs-Modus: kleiner Lichtfleck unter jeder Ameise, die ausgewählte leuchtet
+        const sel = a.bid === this.beobachtet;
+        ctx.fillStyle = sel ? `rgba(255,230,120,${0.45 + 0.25 * Math.sin(t * 5)})` : 'rgba(180,230,255,.18)';
+        ctx.beginPath(); ctx.ellipse(a.x, a.y + 1, sel ? 14 : 10, sel ? 6 : 4, 0, 0, 7); ctx.fill();
+        if (sel) {
+          ctx.strokeStyle = `rgba(255,236,140,${0.7 + 0.3 * Math.sin(t * 5)})`; ctx.lineWidth = 1.5;
+          ctx.beginPath(); ctx.arc(a.x, a.y - 4, 15 + Math.sin(t * 4) * 1.5, 0, 7); ctx.stroke();
+          if (this.name) {
+            ctx.font = 'bold 9px Fredoka, sans-serif'; ctx.textAlign = 'center';
+            const w = ctx.measureText(this.name).width + 10;
+            ctx.fillStyle = 'rgba(40,25,10,.8)'; ctx.beginPath(); ctx.roundRect(a.x - w / 2, a.y - 36, w, 13, 6.5); ctx.fill();
+            ctx.fillStyle = '#ffe9a8'; ctx.fillText(this.name, a.x, a.y - 26.5);
+          }
+        }
+      }
       drawAnt(ctx, {
         x: a.x, y: a.y - (working ? Math.abs(Math.sin(t * 8 + a.id)) * 2 : 0), L: a.L, dir: a.dir, tilt: a.path ? a.tilt : 0, phase: a.phase,
         rolle: a.rolle, acc: a.job === 'bau' ? 'muetze' : a.acc, last: a.last ?? (working ? 'erde' : null), walking: !!a.path,
@@ -271,13 +292,16 @@ export class Agents {
   }
 
   /** Für Klick-Info: Ameise unter Mauszeiger */
-  hit(wx, wy) {
+  hit(wx, wy, r = 9) {
+    let best = null, bd = Infinity;
     for (const a of this.list) {
       if (a.hidden > 0) continue;
-      if (Math.abs(a.x - wx) < 9 && Math.abs(a.y - 4 - wy) < 9) return a;
+      const dx = Math.abs(a.x - wx), dy = Math.abs(a.y - 4 - wy);
+      if (dx < r && dy < r && dx + dy < bd) { bd = dx + dy; best = a; }
     }
-    return null;
+    return best;
   }
+  byBid(bid) { return this.list.find(a => a.bid === bid) ?? null; }
 }
 
 export { isSurfaceWalk };

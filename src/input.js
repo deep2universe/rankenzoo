@@ -7,7 +7,8 @@ export function setupInput(game) {
   // Der aktive Renderer hängt vom Modus ab (Nest = Seitenansicht, Revier = Draufsicht)
   const R = new Proxy({}, { get: (_, k) => { const r = game.aktiverRenderer(); const v = r[k]; return typeof v === 'function' ? v.bind(r) : v; } });
   const NR = game.renderer;
-  const revier = () => game.modus === 'revier';
+  const revier = () => game.modus !== 'nest';   // Revier & Welt: Draufsicht-Karten
+  const welt = () => game.modus === 'welt';
   const ptrs = new Map();
   let drag = null; // {mode, x, y, moved, lastCell}
   let pinch = null;
@@ -49,7 +50,7 @@ export function setupInput(game) {
     }
     if (ptrs.size || drag) game.poke();
     if (revier()) {
-      if (!drag) { game.revierHover(x, y); return; }
+      if (!drag) { if (welt()) game.weltHover(x, y); else game.revierHover(x, y); return; }
     }
     const cell = R.cellAt(x, y);
     if (!drag) { NR.overlay.hover = cell; game.hover(cell, x, y); return; }
@@ -76,7 +77,7 @@ export function setupInput(game) {
     const cell = R.cellAt(x, y);
     if (d.mode === 'graben') { game.endDig(); return; }
     if (d.mode === 'pan') {
-      if (d.moved < 8) { if (revier()) game.revierClick(x, y); else game.clickWorld(cell, x, y); }
+      if (d.moved < 8) { if (welt()) game.weltClick(x, y); else if (revier()) game.revierClick(x, y); else game.clickWorld(cell, x, y); }
       return;
     }
     if (d.mode === 'bauen') { game.tryPlace(cell); if (d.touch) NR.overlay.hover = cell; return; }
@@ -84,7 +85,7 @@ export function setupInput(game) {
   };
   cv.addEventListener('pointerup', up);
   cv.addEventListener('pointercancel', e => { ptrs.delete(e.pointerId); pinch = null; if (drag?.mode === 'graben') game.endDig(); drag = null; });
-  cv.addEventListener('pointerleave', () => { if (!drag) { NR.overlay.hover = null; game.revierR.hover = null; game.revierR.hoverCell = null; } });
+  cv.addEventListener('pointerleave', () => { if (!drag) { NR.overlay.hover = null; game.revierR.hover = null; game.revierR.hoverCell = null; if (game.weltR) game.weltR.hover = null; } });
 
   cv.addEventListener('wheel', e => {
     e.preventDefault();
@@ -111,8 +112,10 @@ export function setupInput(game) {
     if (game.modalOffen()) { if (e.key === 'Escape') game.closeModal(); return; }
     const k = e.key.toLowerCase();
     if (revier()) {
-      if (k === 'escape') { game.revierR.tool = null; game.revierR.selected = null; game.hud.revier?.waehle(null); }
-      else if (k === 'e') game.hud.revier?.expWerkzeug();
+      if (k === 'escape') { game.revierR.tool = null; game.revierR.selected = null; game.hud.revier?.waehle(null); game.hud.revier?.waehleLager(null); if (game.weltR) game.weltR.selected = null; game.hud.welt?.waehle(null); }
+      else if (k === 'e' && !welt()) game.hud.revier?.expWerkzeug();
+      else if (k === 'z' && !welt()) game.hud.revier?.zeltWerkzeug();
+      else if (k === 'b') game.toggleBeobachtung();
       else if (k === 'f') game.openForschung?.();
       else if (k === 'q') game.openQuiz();
       else if (k === 'm') game.openMinigames();
@@ -122,7 +125,8 @@ export function setupInput(game) {
       else if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown', 'a', 'd', 'w', 's'].includes(k)) { held.add(k); e.preventDefault(); }
       return;
     }
-    if (k === 'escape') game.setTool(null);
+    if (k === 'escape') { if (game.ameisenKarte?.offen) game.ameisenKarte.schliesse(); else if (game.beobachtung) game.toggleBeobachtung(false); else game.setTool(null); }
+    else if (k === 'b') game.toggleBeobachtung();
     else if (k === 'g') game.setTool(game.tool === 'gang' ? null : 'gang');
     else if (k === 'x') game.setTool(game.tool === 'abriss' ? null : 'abriss');
     else if (k === 'q') game.openQuiz();

@@ -5,6 +5,8 @@ import { aktuelleMission, fortschritt } from '../game/missions.js';
 import { hochzeitsflugBereit } from '../game/sim.js';
 import { RevierHUD } from './revierUI.js';
 import { TECHS } from '../game/forschung.js';
+import { baubarePlaene, baukosten } from '../game/bauplaene.js';
+import { WeltHUD } from './weltUI.js';
 
 const TIPPS = {
   nahrung: 'Mehr Sammlerinnen, Pilzgarten, Blattlaus-Weide oder Bäckerei – oder Denksport spielen!',
@@ -49,6 +51,7 @@ export class HUD {
         h('button.icon-btn', { title: 'Aufgaben', onclick: () => g.openMissions() }, '📜'),
         h('button.icon-btn', { title: 'Wissensbuch – dein Lernfortschritt', onclick: () => g.openWissen() }, '📊'),
         h('button.icon-btn', { title: 'Fragen-Archiv – welche Fragen gab es, was ist richtig?', onclick: () => g.openArchiv() }, '🗂️'),
+        h('button.icon-btn', { title: 'Bauplan-Buch – wie entwickeln sich die Gebäude?', onclick: () => g.openBauplanBuch() }, '📐'),
         this.forschBtn = h('button.icon-btn.forsch-btn', { title: 'Forschung & Entwicklung (F)', onclick: () => g.openForschung() }, '🔬', h('i.forsch-ring')),
         this.tempoBtn = h('button.icon-btn', { title: 'Spielgeschwindigkeit', onclick: () => g.toggleTempo() }, '▶️'),
         h('button.icon-btn', { title: 'Einstellungen', onclick: () => g.openSettings() }, '⚙️'),
@@ -64,9 +67,11 @@ export class HUD {
     this.buildbar = h('div.buildbar', this.werkzeuge, this.karten);
     const aktionen = h('div.aktionen',
       this.denkBtn = h('button.aktion-gross.denk', { onclick: () => g.openMinigames() }, h('span.em', '🧠'), 'Denksport'),
-      this.quizBtn = h('button.aktion-gross.quiz', { onclick: () => g.openQuiz() }, h('span.em', '📚'), 'Quiz'),
+      this.quizBtn = h('button.aktion-gross.quiz', { onclick: () => g.openQuiz(), title: 'Schule: Stundenplan & Tests (Q)' }, h('span.em', '🎒'), h('span.qt', 'Schule'), this.quizInfo = h('small.quiz-info', '')),
     );
+    this.lupeBtn = h('button.icon-btn.lupe-btn', { title: 'Ameisen-Beobachtung (B): Tippe auf eine Ameise und lerne sie kennen', onclick: () => g.toggleBeobachtung() }, '🔍');
     const zoom = h('div.zoom-tools',
+      this.lupeBtn,
       h('button.icon-btn', { title: 'Hineinzoomen', onclick: () => g.zoom(1.25) }, '➕'),
       h('button.icon-btn', { title: 'Herauszoomen', onclick: () => g.zoom(0.8) }, '➖'),
       h('button.icon-btn', { title: 'Zur Königin / zum Hügel (H)', onclick: () => g.focusHome() }, '🏠'),
@@ -76,14 +81,18 @@ export class HUD {
     this.schalter = h('div.modus-schalter', { role: 'group', 'aria-label': 'Ansicht wechseln' },
       h('button.ms-nest', { onclick: () => g.wechsleModus('nest'), title: 'Nest: graben & bauen (Shift)' }, h('span.em', '🏠'), h('span.t', 'Nest')),
       h('button.ms-revier', { onclick: () => g.wechsleModus('revier'), title: 'Revier: Ameisen Befehle geben (Shift)' }, h('span.em', '🗺️'), h('span.t', 'Revier')),
+      h('button.ms-welt', { onclick: () => g.wechsleModus('welt'), title: 'Welt: Hochzeitsflug & neue Kolonien (Shift)' }, h('span.em', '🌍'), h('span.t', 'Welt')),
       h('i.ms-kugel'),
       h('kbd', '⇧ Shift'));
     fill(this.root, top, this.schalter, h('div.links', this.panel, this.mission), this.buildbar, aktionen, zoom, this.hinweis);
     this.revier = new RevierHUD(g, this.root);
     this.panel.after(this.revier.panel);
+    this.welt = new WeltHUD(g, this.root);
+    this.revier.panel.after(this.welt.panel);
     this.panelOffen = window.innerWidth > 900;
     this.panel.classList.toggle('zu', !this.panelOffen);
     this.revier.panel.classList.toggle('zu', !this.panelOffen);
+    this.welt.panel.classList.toggle('zu', !this.panelOffen);
   }
 
   befehl(k, v) {
@@ -98,12 +107,14 @@ export class HUD {
     this.panelSig = ''; this.planSig = ''; this.missionSig = '';
     this.revier.sig = '';
     this.update(this.game.d);
+    this.welt?.refresh(true);
   }
 
   togglePanel() {
     this.panelOffen = !this.panelOffen;
     this.panel.classList.toggle('zu', !this.panelOffen);
     this.revier.panel.classList.toggle('zu', !this.panelOffen);
+    this.welt.panel.classList.toggle('zu', !this.panelOffen);
     this.revier.sig = '';
     this.panelSig = '';
   }
@@ -150,28 +161,43 @@ export class HUD {
     this.kolonie.querySelector('.rang').textContent = `${rang.icon} ${rang.name} · Tag ${d.tag}`;
     this.tempoBtn.textContent = s.einstellungen.tempo === 2 ? '⏩' : '▶️';
     this.updateMission(d);
+    this.updateSchule();
+    this.lupeBtn.classList.toggle('aktiv', !!this.game.beobachtung);
     if (this.game.modus === 'revier') { this.revier.refresh(); return; }
+    if (this.game.modus === 'welt') { this.welt.refresh(); return; }
     this.updateBuildbar(d);
     if (this.panelOffen) this.updatePanel(d);
   }
 
   updateBuildbar() {
     const s = this.game.state, g = this.game;
-    const sig = JSON.stringify(s.plaene) + g.tool + g.buildTyp + Math.floor(s.res.sterne / 5);
+    const plaene = baubarePlaene(s);
+    const sig = plaene.join() + g.tool + g.buildTyp + Math.floor(s.res.sterne / 5) + Math.floor((s.res.material ?? 0) / 5) + s.rooms.length;
     for (const b of this.werkzeuge.children) b.classList.toggle('aktiv', g.tool === b.dataset.tool);
     if (sig === this.planSig) return;
     this.planSig = sig;
-    const eintraege = Object.entries(s.plaene).filter(([, n]) => n > 0);
-    if (!eintraege.length) {
-      fill(this.karten, h('div.leer-hinweis', '📚 Keine Baupläne – spiele ein Quiz, um neue zu gewinnen!'));
+    if (!plaene.length) {
+      fill(this.karten, h('div.leer-hinweis', '📚 Keine Baupläne – schreibe im Quiz einen perfekten Test!'));
       return;
     }
-    fill(this.karten, ...eintraege.map(([typ, n]) => {
+    fill(this.karten, ...plaene.map(typ => {
       const G = GEBAEUDE[typ];
-      return h('button.bkarte' + (g.buildTyp === typ && g.tool === 'bauen' ? '.aktiv' : '') + (s.res.sterne < G.kosten ? '.zu-teuer' : ''),
-        { 'data-plan': typ, title: `${G.name}: ${G.text}`, onclick: () => g.selectPlan(typ) },
-        h('span.em', G.icon), h('span.nm', G.name), h('span.kosten', `⭐ ${G.kosten}`), h('span.anz', '×' + n));
+      const k = baukosten(s, typ);
+      const zuTeuer = s.res.sterne < k.sterne || (s.res.material ?? 0) < k.material;
+      const n = s.rooms.filter(r => GEBAEUDE[r.typ].linie === G.linie).length;
+      return h('button.bkarte' + (g.buildTyp === typ && g.tool === 'bauen' ? '.aktiv' : '') + (zuTeuer ? '.zu-teuer' : ''),
+        { 'data-plan': typ, title: `${G.name}: ${G.text}\nKosten: ${k.sterne} ⭐${k.material ? ` + ${k.material} 🪵` : ''}${n ? ` (jedes weitere wird etwas teurer)` : ''}`, onclick: () => g.selectPlan(typ) },
+        h('span.em', G.icon), h('span.nm', G.name), h('span.kosten', `⭐ ${k.sterne}${k.material ? ` 🪵${k.material}` : ''}`), n ? h('span.anz', '×' + n) : null);
     }));
+  }
+
+  /** Kleiner Hinweis am Schul-Knopf: welche Stunde ist dran? */
+  updateSchule() {
+    const st = this.game.schulStatus?.();
+    if (!st) return;
+    const txt = st.schulschluss ? `Schulschluss · ${Math.ceil(st.sekundenBisMorgen / 60)} min` : `${st.stunde + 1}. Std: ${st.fachIcon} ${st.fachName}`;
+    if (this.quizInfo.textContent !== txt) this.quizInfo.textContent = txt;
+    this.quizBtn.classList.toggle('pause', !!st.schulschluss);
   }
 
   updateMission(d) {
@@ -245,8 +271,8 @@ export class HUD {
           ? [h('button.btn.klein', { 'data-act': 'huegel', onclick: () => g.upgradeHill() }, `⛰️ Hügel ausbauen (Stufe ${lvl + 1})`),
             h('div.req', `Kosten: ⭐ ${kosten.sterne} · 🧱 ${kosten.gang}${kosten.material ? ` · 🪵 ${kosten.material}` : ''}${kosten.pop ? ` · ab ${kosten.pop} Ameisen` : ''} — mehr Platz & Wärme`)]
           : h('div.req', '⛰️ Dein Hügel hat die volle Größe!'),
-        h('button.btn.klein.lila', { disabled: !hz.ok, onclick: () => g.hochzeitsflug() }, '🪽 Hochzeitsflug starten'),
-        hz.ok ? h('div.req', 'Bereit! Drohnen und junge Königinnen gründen neue Kolonien.') : h('div.req', { style: { whiteSpace: 'pre-line' } }, hz.gruende.map(x => '• ' + x).join('\n')),
+        h('button.btn.klein.lila', { onclick: () => g.wechsleModus('welt') }, hz.ok ? '🪽 Hochzeitsflug: Ziel auf der Weltkarte wählen' : '🌍 Zur Weltkarte'),
+        hz.ok ? h('div.req', 'Bereit! Wähle auf der Weltkarte einen Ort und fliege durch die Ringe dorthin.') : h('div.req', { style: { whiteSpace: 'pre-line' } }, hz.gruende.map(x => '• ' + x).join('\n')),
       ),
     ].flat(Infinity).filter(Boolean));
   }

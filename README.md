@@ -1,6 +1,6 @@
 # 🐜 Ameisenreich
 
-**Ein Lern- und Aufbauspiel für die 4. Klasse.** Du bist die Ameisenkönigin und baust einen ganzen Ameisenstaat auf: tief unter der Erde und oben im Ameisenhügel. Baupläne gibt es nur für **Wissen**. Im Quiz beantwortest du Fragen aus dem Stoff der 4. Klasse (Bildungsplan Baden-Württemberg). In der **Denksport-Halle** übst du Konzentration und Reaktion.
+**Ein Lern- und Aufbauspiel für die 4. Klasse.** Du bist die Ameisenkönigin und baust einen ganzen Ameisenstaat auf: tief unter der Erde und oben im Ameisenhügel. Baupläne gibt es nur für **Wissen**: In der **Schule** folgst du einem echten Stundenplan, wählst im aktuellen Fach ein Thema und schreibst Tests zum Stoff der 4. Klasse (Bildungsplan Baden-Württemberg). Wer alle Fragen eines Tests richtig hat, schaltet einen Bauplan frei. In der **Denksport-Halle** übst du Konzentration und Reaktion.
 
 ## Starten
 
@@ -18,16 +18,37 @@ Tests:
 npm test
 ```
 
-`npm test` prüft das Schema der Fragenbanken und führt Tests für Quiz-Engine, Generatoren, Simulation und die Strategie-Ebene (Revier, Forschung, Handel, alle Gebäude) aus.
+`npm test` prüft das Schema der Fragenbanken und führt Tests für Quiz-Engine, Generatoren, Simulation, die Strategie-Ebene (Revier, Forschung, Handel, alle Gebäude) sowie Stundenplan, Tests, Bauplan-Vergabe, Ausbau, Zelte, Bürgerinnen und Welt aus.
+
+Entwickler-Seiten (über den Server öffnen): `tools/raeume-galerie.html` (alle Gebäude & Ausbaustufen), `tools/flug-test.html` (Hochzeitsflug), `tools/welt-test.html` (Weltkarte).
 
 ## Was steckt drin?
 
-- **Zwei Ansichten, ein Spiel – Shift ⇧ wechselt:**
+- **Schule mit Stundenplan 🎒:**
+  - Eine Schulwoche (Mo–Fr, je 4 Stunden): Deutsch 5, Mathe 5, Sachunterricht 3, Sport & Miteinander 3, Englisch 2, Musik & Kunst 2 Stunden. Das Fach der aktuellen Stunde ist vorgegeben, das **Thema wählt das Kind selbst**.
+  - Jedes Thema ist in feste **Tests** (ca. 6 Fragen) aufgeteilt, vom leichten Test 1 bis zum kniffligen letzten Test – insgesamt 228 Tests. **Bestandene Tests kommen nicht wieder** (ab der Hälfte richtig). Nicht bestandene Tests warten auf die nächste Stunde des Fachs.
+  - **Vorher sichtbar, was es zu gewinnen gibt:** Jede Themenkarte zeigt den Bauplan (mit gezeichnetem Gebäude) oder die Rohstoffe. Die Test-Vorschau zeigt eine Belohnungs-Leiter: je richtige Antwort ⭐ 🧱 🔬, ab der Hälfte 🪵 🍯, bei allen richtig den **Bauplan**.
+  - **Baupläne nur bei einem perfekten Test.** Sonst gibt es Rohstoffe, abhängig von der Zahl richtiger Antworten. Es gibt mehr Tests als Baupläne – sind alle Baupläne vergeben, verteilen die Tests nur noch Rohstoffe (bei perfekten Tests einen Schatz-Bonus).
+  - Nach vier Stunden ist **Schulschluss**; der nächste Schultag beginnt mit dem nächsten Ameisentag.
+  - Das **Fragen-Archiv** zeigt weiterhin alle Fragen mit richtiger Antwort und Erklärung.
+- **Gebäude, die sich entwickeln (110 Baupläne in 36 Entwicklungslinien):**
+  - Beispiel Bildung: Kindergarten → Schule → Berufsschule → Gymnasium → Universität. Ähnlich für alle Gebäude, z. B. Schlafkammer → Wohnhöhle → Ameisen-Villa, Pilzgarten → Pilzplantage → Pilz-Gewächshaus, Kino → Großkino → Filmpalast, Königinnenkammer → Thronsaal → Kronjuwelen-Palast.
+  - Stufe 1 wird neu gebaut, höhere Stufen entstehen durch **Ausbau** an Ort und Stelle (Gebäude antippen → „Ausbauen"); das Gebäude arbeitet während des Ausbaus weiter. Jede Stufe wirkt stärker.
+  - Baupläne sind **dauerhaft freigeschaltet**: Gebaut wird mit Sternen und Baumaterial, jedes weitere Gebäude der gleichen Art kostet etwas mehr.
+  - Die Quiz-Entwicklung spiegelt die Gebäude-Entwicklung: niedrige Stufen liegen auf leichten Tests, Gymnasium und Universität erst auf schwierigen. Jede Linie gehört zu einem Fach (Bildung → Deutsch, Labor → Mathe, Pilzgarten → Sachunterricht …).
+  - Das **Bauplan-Buch 📐** zeigt alle Linien mit Bildern: freigeschaltet, im Quiz zu gewinnen oder noch gesperrt (mit Grund).
+- **Ameisen-Beobachtung 🔍 (Taste B):** Jede Ameise ist eine Persönlichkeit. Ein Tipp zeigt ihren Steckbrief: Name, Wohlbefinden, was sie gerade tut und vorhat, beste Freundin und bester Freund, wo sie wohnt, ob sie in den Kindergarten, die Schule oder die Universität geht, Lieblingsessen, Traum und Erlebnisse. Alle Aussagen sind positiv und zukunftsfroh. Mit „Folgen" begleitet die Kamera die Ameise.
+
+- **Drei Ansichten, ein Spiel – Shift ⇧ wechselt Nest → Revier → Welt:**
   - 🏠 **Nest** (Seitenansicht): Gänge graben, Kammern bauen, das Volk versorgen.
   - 🗺️ **Revier** (Draufsicht): die Wiese rund um den Hügel. Hier gibst du den Ameisen **Befehle**: Sammel-Trupps zu Futterquellen schicken, Wächterinnen gegen Störenfriede abstellen, **Expeditionen** in den Nebel senden, Schätze finden, mit einem Nachbarvolk handeln. Wetter und Tageszeit wirken sich aus.
+  - 🌍 **Welt** (Übersichtskarte): das Heimatnest mit seinem Revier inmitten des Gartens, dazu 9 Orte für neue Kolonien (Lichtung, Blumenwiese, Bachufer, Waldrand, Baumstumpf, Gemüsegarten, Sandhügel, Spielplatz, Blumentopf).
   - Der Wechsel wird mit einer Iris-Überblendung vom Ameisenhügel aus animiert; die Oberfläche wechselt ihr Farbthema.
+- **Hochzeitsflug als eigenes Spiel 🪽:** Auf der Weltkarte wählt das Kind ein Ziel. Dann steuert es die junge Königin (Maus, Finger oder Pfeiltasten) durch goldene Ringe zum Zielort. Gefangene Ringe geben Flugkraft, verpasste kosten welche; weite Ziele haben mehr und kleinere Ringe und Windböen. Gelingt der Flug, entsteht dort eine **Tochterkolonie**, die dem Heimatvolk dauerhaft einen Bonus schenkt. Misslingt er, landet die Königin sanft und es kann sofort nochmal versucht werden. Flugfeld und Hochzeitsflughafen machen die Ringe größer.
+- **Größeres Revier (64 × 44 Felder):** mit Blumenwiesen 🌸, Löwenzahn 🌼 und Kleeblüten ☘️ – **Pollen** ist eiweißreich und lässt die Brut schneller wachsen –, Pilzkreisen, alten Eichen, einem zweiten Teich mit Bach und **16 Fundstücken** im Nebel (Glasmurmel, Schneckenhaus, Bernstein, Kompass …), die Expeditionen heimbringen und die in einer Sammlung landen.
+- **Zelte & Lager ⛺:** Mit dem Bauplan „Expeditions-Zelt" stellt das Kind im erkundeten Revier Zelte auf. Expeditionen starten vom nächsten Lager, Sammel-Wege werden kürzer, fertige Lager lüften den Nebel. Ausbau: Zelt → Basislager → Außenposten (eine Expedition mehr).
 - **Aufbau-Strategie:**
-  - 37 Gebäude, darunter Sporthalle, Eisladen, Sechs-Bein-Schuhladen, Fühler-Salon, Ameisenschule, Forschungslabor, Theater, Musikschule, Krümelkasse, Tautropfen-Bad, Wachstube, Späherturm, Spielplatz, Handelsposten, Rathaus und Duftspur-Bahnhof.
+  - 36 Grundgebäude (mit Ausbaustufen 110), darunter Sporthalle, Eisladen, Sechs-Bein-Schuhladen, Fühler-Salon, Ameisenschule, Forschungslabor, Theater, Musikschule, Krümelkasse, Tautropfen-Bad, Wachstube, Späherturm, Spielplatz, Handelsposten, Rathaus und Duftspur-Bahnhof.
   - Rohstoffe: Sterne ⭐, Gangstücke 🧱, Nahrung 🍯, **Baumaterial 🪵** (aus dem Revier) und **Forschungspunkte 🔬** (aus Quiz und Bildungsgebäuden).
   - **Forschung & Entwicklung:** 20 Techniken in 5 Ästen (Landwirtschaft, Erkundung, Baukunst, Volk & Brut, Kultur & Wissen), jede mit echtem Ameisen-Fakt.
   - **Arbeitsverteilung:** Bauarbeiterinnen je Baustelle und Ammen-Einsatz einstellbar.
@@ -36,10 +57,10 @@ npm test
   - Königin, Arbeiterinnen, Drohnen und Brut (Ei → Larve → Puppe).
   - Ausgebildete Ameisen mit Berufen und Accessoires (Kochmütze, Doktorhut, Helm, Zylinder …).
   - Sechs Bedürfnisse bestimmen die Zufriedenheit.
-  - Ein Hochzeitsflug gründet neue Kolonien.
+  - Ein Hochzeitsflug (Ring-Flugspiel) gründet Tochterkolonien auf der Weltkarte.
 - **Wissens-Quiz:**
   - 1 125 kuratierte Fragen in 6 Fächergruppen, dazu unbegrenzt viele Rechen- und Zahlenaufgaben mit Rechenweg.
-  - **Gelöste Fragen kommen nicht wieder.** Falsch beantwortete Fragen werden wiederholt, bis sie sitzen.
+  - **Bestandene Tests kommen nicht wieder.** Falsch beantwortete Fragen werden direkt in der „Zweiten Chance“ geübt; nicht bestandene Tests warten auf die nächste Stunde.
   - **Fragen-Archiv 🗂️:** alle gestellten Fragen mit Status; die richtige Antwort und Erklärung zeigt eine Tooltip-Karte beim Darüberfahren, ein Klick pinnt sie fest (mit eigenem ✕).
   - Jede richtige Antwort bringt auch Forschungspunkte.
 - **Denksport:** 10 Minispiele: Marienkäfer-Alarm (mit Zifferntasten 1–9), Duftspur, Memory, Farben-Wirrwarr, Zahlenjagd, Blitzblick, Futter-Waage, Pfadfinderin, Kammer-Inventur, Sortier-Ameise.
@@ -54,8 +75,10 @@ npm test
 
 | Taste | Nest | Revier |
 |---|---|---|
-| ⇧ Shift | ins Revier | ins Nest |
-| Q / M | Quiz / Denksport | Quiz / Denksport |
+| ⇧ Shift | ins Revier | zur Welt (dort: zurück ins Nest) |
+| Q / M | Schule / Denksport | Schule / Denksport |
+| B | Ameisen-Beobachtung | Ameisen-Beobachtung |
+| Z | – | Zelt aufstellen |
 | F | Forschung | Forschung |
 | G / X | Gang graben / Abriss | – |
 | E | – | Expedition: Ziel wählen |
@@ -69,11 +92,12 @@ npm test
 index.html                 Einstieg
 styles/main.css            Gestaltung
 src/main.js                Spielsteuerung & Hauptschleife
-src/game/                  Konfiguration, Welt/Gitter, Simulation, Aktionen, Aufgaben, Spielstand,
-                           Revier (revier.js), Forschung (forschung.js)
+src/game/                  Konfiguration & Entwicklungslinien, Welt/Gitter, Simulation, Aktionen, Aufgaben, Spielstand,
+                           Revier & Lager (revier.js), Forschung, Baupläne & Ausbau (bauplaene.js),
+                           Weltkarte & Tochterkolonien (welt.js), Bürgerinnen (buerger.js)
 src/render/                Canvas-Renderer: Gelände, Kammern, Ameisen, Himmel, Revier-Karte, Sprite-Caches
-src/ui/                    Oberfläche: HUD, Quiz, Minispiele, Fenster, Revier, Forschung, Archiv, Tooltip
-src/quiz/                  Quiz-Engine (adaptiv, Leitner) & Aufgaben-Generatoren
+src/ui/                    Oberfläche: HUD, Schule/Quiz, Bauplan-Buch, Ameisen-Karte, Hochzeitsflug, Welt, Revier, …
+src/quiz/                  Quiz-Engine, Aufgaben-Generatoren, Stundenplan & Tests (stundenplan.js)
 src/data/questions/        Fragenbanken je Fach (+ SCHEMA.md)
 tools/                     Server, Validator, Smoke-Test, Strategie-Test
 _agent_doc/                Recherche zum Lehrplan & Spieldesign

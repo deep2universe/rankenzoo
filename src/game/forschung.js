@@ -42,8 +42,8 @@ export const TECHS = {
     text: 'Stabile Decken: Schlafkammern bieten 25 % mehr Platz.', fakt: 'Ameisennester können metertief sein – mit Hunderten Kammern, verbunden durch Gänge.' },
   lueftung: { ast: 'bau', stufe: 3, voraus: ['gewoelbe'], name: 'Lüftungsschächte', icon: '🌬️', effekte: { hygieneMult: 0.3, waermeMult: 0.15 },
     text: 'Frische Luft: Sauberkeit +30 %, Wärme +15 %.', fakt: 'Termiten und Ameisen bauen Nester mit Luftkanälen – warme Luft steigt auf und zieht frische nach.' },
-  architektur: { ast: 'bau', stufe: 4, voraus: ['lueftung'], name: 'Architektur', icon: '📐', freischalten: 'planKopie', effekte: {},
-    text: 'Kopiere Baupläne von Kammern, die du schon gebaut hast – gegen Baumaterial und Sterne.', fakt: 'Weberameisen bauen Nester aus lebenden Blättern und arbeiten dabei als Team: Sie bilden lange Ketten aus ihren Körpern.' },
+  architektur: { ast: 'bau', stufe: 4, voraus: ['lueftung'], name: 'Architektur', icon: '📐', effekte: { ausbauRabatt: 0.25, bauTempo: 0.15 },
+    text: 'Kluge Baupläne: Jeder Ausbau kostet 25 % weniger, Baustellen sind 15 % schneller.', fakt: 'Weberameisen bauen Nester aus lebenden Blättern und arbeiten dabei als Team: Sie bilden lange Ketten aus ihren Körpern.' },
   // 🥚 Volk & Brut
   geleeroyal: { ast: 'volk', stufe: 1, name: 'Futtersaft', icon: '🍼', effekte: { eiTempo: 0.2 },
     text: 'Die Königin legt 20 % schneller Eier.', fakt: 'Ammen füttern Larven mit Futtersaft aus ihrem Sozialmagen – Mund zu Mund.' },

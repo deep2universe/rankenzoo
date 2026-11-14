@@ -1,12 +1,12 @@
 // Spieleraktionen: Graben, Bauen, Abreißen, Hügel ausbauen, Hochzeitsflug, Belohnungen.
-import { GEBAEUDE, hillUpgradeCost, HILL_MAX, FACH_BAUPLAENE, rangVon } from './config.js';
+import { GEBAEUDE, hillUpgradeCost, HILL_MAX } from './config.js';
 import { canDig, dig, canPlace, removeRoom, fillTunnel, setHill, get, idx } from './world.js';
 import { addRoom } from './state.js';
 import { refreshConnectivity } from './sim.js';
 import { C } from './config.js';
 import { emit } from '../events.js';
-import { pick, shuffle } from '../util.js';
-import { hatTech } from './forschung.js';
+import { istFrei, baukosten, neuBaubar, offenePlaene, schalteFrei, zufallsPlan } from './bauplaene.js';
+import { gruendeKolonie, ortById, drohnenNoetig } from './welt.js';
 
 export function digCell(state, x, y, extra) {
   if (state.res.gang <= 0) return { ok: false, grund: 'Keine Gangstücke mehr! Verdiene neue im Quiz.' };
@@ -22,16 +22,17 @@ export function digCell(state, x, y, extra) {
 
 export function placeBuilding(state, typ, x, y) {
   const g = GEBAEUDE[typ];
-  if (!state.plaene[typ]) return { ok: false, grund: 'Dafür brauchst du einen Bauplan – gewinne ihn im Quiz!' };
-  if (state.res.sterne < g.kosten) return { ok: false, grund: `Du brauchst ${g.kosten} ⭐ (du hast ${Math.floor(state.res.sterne)}).` };
-  if (g.material && (state.res.material ?? 0) < g.material) return { ok: false, grund: `Du brauchst ${g.material} 🪵 Baumaterial – schicke Sammlerinnen ins Revier (Shift)!` };
+  if (!istFrei(state, typ)) return { ok: false, grund: 'Dafür brauchst du einen Bauplan – gewinne ihn mit einem perfekten Test im Quiz!' };
+  if (!neuBaubar(typ)) return { ok: false, grund: `${g.name} entsteht durch Ausbau eines bestehenden Gebäudes.` };
+  const k = baukosten(state, typ);
+  if (state.res.sterne < k.sterne) return { ok: false, grund: `Du brauchst ${k.sterne} ⭐ (du hast ${Math.floor(state.res.sterne)}).` };
+  if (k.material && (state.res.material ?? 0) < k.material) return { ok: false, grund: `Du brauchst ${k.material} 🪵 Baumaterial – schicke Sammlerinnen ins Revier (Shift)!` };
   const r = canPlace(state.world, state.rooms, typ, x, y);
   if (!r.ok) return r;
-  state.res.sterne -= g.kosten;
-  if (g.material) state.res.material -= g.material;
-  state.plaene[typ]--;
-  if (!state.plaene[typ]) delete state.plaene[typ];
+  state.res.sterne -= k.sterne;
+  if (k.material) state.res.material -= k.material;
   const room = addRoom(state, typ, x, y, false);
+  room.bezahlt = { sterne: k.sterne, material: k.material };
   if (room.ersetzt.length) {
     state.res.gang += room.ersetzt.length;
     state.stats.ersetzt += room.ersetzt.length;
@@ -51,10 +52,11 @@ export function demolishAt(state, x, y) {
     if (g.abreissbar === false) return { ok: false, grund: 'Die Königinnenkammer kann nicht abgerissen werden.' };
     removeRoom(state.world, room);
     state.rooms = state.rooms.filter(r => r !== room);
-    state.plaene[room.typ] = (state.plaene[room.typ] ?? 0) + 1;
-    // Sterne: bei fertigen Gebäuden die Hälfte zurück, bei Baustellen alles
-    state.res.sterne += room.bau >= 1 ? Math.floor(g.kosten / 2) : g.kosten;
-    if (g.material) state.res.material = (state.res.material ?? 0) + (room.bau >= 1 ? Math.floor(g.material / 2) : g.material);
+    // Sterne & Material: bei fertigen Gebäuden die Hälfte zurück, bei Baustellen alles. Der Bauplan bleibt freigeschaltet.
+    const bez = room.bezahlt ?? { sterne: g.kosten ?? 0, material: g.material ?? 0 };
+    const f = room.bau >= 1 ? 0.5 : 1;
+    state.res.sterne += Math.floor(bez.sterne * f);
+    state.res.material = (state.res.material ?? 0) + Math.floor((bez.material ?? 0) * f);
     state.res.gang = Math.max(0, state.res.gang - (room.ersetzt?.length ?? 0));
     refreshConnectivity(state);
     emit('abgerissen', room);
@@ -87,65 +89,34 @@ export function upgradeHill(state, pop) {
   return { ok: true };
 }
 
-export function hochzeitsflug(state) {
+/** Erfolgreicher Hochzeitsflug: neue Tochterkolonie am Zielort. */
+export function hochzeitsflug(state, ortId) {
   const k = state.kronenStufe;
-  state.volk.drohnen -= 10;
+  const ort = ortById(ortId);
+  state.volk.drohnen = Math.max(0, state.volk.drohnen - drohnenNoetig(state));
   state.kronenStufe++;
   state.kolonienGegruendet++;
   state.stats.hochzeitsfluege++;
   const sterne = 150 + 60 * k;
   state.res.sterne += sterne;
-  const plan = pick(verfuegbarePlaene(state, 9));
-  state.plaene[plan] = (state.plaene[plan] ?? 0) + 1;
-  emit('hochzeitsflug', { sterne, plan, stufe: state.kronenStufe });
-  return { sterne, plan };
+  const kolonie = ort ? gruendeKolonie(state, ortId) : null;
+  if (state.welt) state.welt.fluege = (state.welt.fluege ?? 0) + 1;
+  const plan = zufallsPlan(state, 'hochzeitsflug');
+  emit('hochzeitsflug', { sterne, plan, stufe: state.kronenStufe, kolonie, ort });
+  return { sterne, plan, kolonie };
 }
 
-/** Pläne, die beim aktuellen Kolonie-Rang gewonnen werden können. */
-export function verfuegbarePlaene(state, rangOverride) {
-  const pop = state.volk.arbeiterinnen + state.volk.drohnen + 1;
-  const rang = rangOverride ?? rangVon(pop);
-  return Object.entries(GEBAEUDE)
-    .filter(([k, g]) => k !== 'koenigin' && g.stufe <= rang)
-    .filter(([, g]) => !g.forschung || hatTech(state, g.forschung))
-    .filter(([k]) => k !== 'handel' || hatTech(state, 'diplomatie') || rang >= 3)
-    .filter(([k, g]) => !(g.einzigartig && (state.rooms.some(r => r.typ === k) || state.plaene[k])))
-    .map(([k]) => k);
+/** Pläne, die gerade gewonnen werden können (für Tests & Anzeigen). */
+export function verfuegbarePlaene(state, rang) {
+  return offenePlaene(state, rang);
 }
 
-/** Drei Baupläne zur Auswahl – mindestens einer passt thematisch zum Fach. */
-export function planAuswahl(state, fach, anzahl = 3) {
-  const alle = verfuegbarePlaene(state);
-  const thema = (FACH_BAUPLAENE[fach] ?? []).filter(p => alle.includes(p));
-  const result = [];
-  if (thema.length) result.push(pick(thema));
-  // Grundbedarf bevorzugen, wenn er fehlt
-  const basis = ['brut', 'wohnen', 'vorrat'].filter(p => alle.includes(p));
-  for (const p of shuffle([...basis, ...alle, ...alle])) {
-    if (result.length >= anzahl) break;
-    if (!result.includes(p)) result.push(p);
-  }
-  return shuffle(result);
-}
-
-export function grantPlan(state, typ, n = 1) {
-  state.plaene[typ] = (state.plaene[typ] ?? 0) + n;
-  emit('plan', typ);
-}
-
-/** Architektur-Forschung: Bauplan einer schon gebauten Kammer kopieren. */
-export function planKopieKosten(typ) {
-  const g = GEBAEUDE[typ];
-  return { material: 15 + Math.round(g.kosten * 0.5), sterne: Math.round(g.kosten * 0.5) };
-}
-export function kopierePlan(state, typ) {
-  const g = GEBAEUDE[typ];
-  if (!g || g.einzigartig || typ === 'koenigin') return { ok: false, grund: 'Diesen Plan kann man nicht kopieren.' };
-  if (!hatTech(state, 'architektur')) return { ok: false, grund: 'Erforsche zuerst „Architektur".' };
-  if (!state.rooms.some(r => r.typ === typ && r.bau >= 1)) return { ok: false, grund: 'Nur Kammern, die du schon gebaut hast.' };
-  const k = planKopieKosten(typ);
-  if ((state.res.material ?? 0) < k.material || state.res.sterne < k.sterne) return { ok: false, grund: `Kosten: ${k.material} 🪵 und ${k.sterne} ⭐.` };
-  state.res.material -= k.material; state.res.sterne -= k.sterne;
-  grantPlan(state, typ);
-  return { ok: true };
+/**
+ * Bauplan geben (Mission, Fund). Ist er schon freigeschaltet, gibt es stattdessen Sterne.
+ * Gibt den Typ zurück, wenn er neu freigeschaltet wurde, sonst null.
+ */
+export function grantPlan(state, typ) {
+  if (typ && schalteFrei(state, typ, 'geschenk')) return typ;
+  state.res.sterne += Math.round((GEBAEUDE[typ]?.kosten ?? 30) * 0.6);
+  return null;
 }

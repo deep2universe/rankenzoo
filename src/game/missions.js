@@ -1,13 +1,15 @@
 // Aufgaben (Missionen): führen durchs Spiel und belohnen Fortschritt.
-import { FAECHER } from './config.js';
+import { FAECHER, GEBAEUDE, QUELLEN } from './config.js';
 
-const anz = (s, typ) => s.rooms.filter(r => r.typ === typ && r.bau >= 1).length;
+// zählt Gebäude dieser Art – auch ausgebaute (eine Universität zählt z. B. auch als Kindergarten)
+const anz = (s, typ) => s.rooms.filter(r => r.bau >= 1 && GEBAEUDE[r.typ]?.linie === GEBAEUDE[typ].linie && GEBAEUDE[r.typ].lstufe >= GEBAEUDE[typ].lstufe).length;
 const pop = s => s.volk.arbeiterinnen + s.volk.drohnen + 1;
 const truppSumme = s => Object.values(s.revier?.trupps ?? {}).reduce((a, t) => a + (t.s ?? 0), 0);
-const NEUE_BAUTEN = ['sporthalle', 'eisladen', 'schuhladen', 'friseur', 'schule', 'theater', 'musikschule', 'bank', 'schwimmbad', 'spielplatz', 'rathaus'];
+const NEUE_BAUTEN = ['sporthalle', 'eisladen', 'schuhladen', 'friseur', 'kita', 'theater', 'musikschule', 'bank', 'schwimmbad', 'spielplatz', 'rathaus'];
+const pollenTrupp = s => Object.entries(s.revier?.trupps ?? {}).some(([id, t]) => t.s > 0 && QUELLEN[s.revier.quellen.find(q => q.id === +id)?.typ]?.pollen);
 
 export const MISSIONEN = [
-  { id: 'quiz1', icon: '📚', titel: 'Willkommen, Königin!', text: 'Tippe auf den goldenen Quiz-Knopf und spiele deine erste Wissensrunde. So verdienst du Baupläne!',
+  { id: 'quiz1', icon: '🎒', titel: 'Willkommen, Königin!', text: 'Tippe auf den Schul-Knopf 🎒. Dein Stundenplan zeigt, welches Fach dran ist – wähle ein Thema und schreibe deinen ersten Test!',
     ziel: s => [s.stats.quizRunden, 1], lohn: { sterne: 20 }, hinweis: '.aktion-gross.quiz' },
   { id: 'gang5', icon: '⛏️', titel: 'Die ersten Gänge', text: 'Wähle das Gang-Werkzeug und ziehe mit dem Finger 5 neue Gangstücke in die Erde.',
     ziel: s => [s.stats.gegraben, 5], lohn: { gang: 8 }, hinweis: '[data-tool="gang"]' },
@@ -27,17 +29,25 @@ export const MISSIONEN = [
     ziel: s => [pop(s), 20], lohn: { sterne: 30, plan: 'pilz' } },
   { id: 'pilz', icon: '🍄', titel: 'Pilzgärtnerinnen', text: 'Baue einen Pilzgarten tief in der Erde (mindestens 6 Reihen unter der Wiese).',
     ziel: s => [anz(s, 'pilz'), 1], lohn: { sterne: 30 } },
+  { id: 'perfekt1', icon: '🏆', titel: 'Ein perfekter Test', text: 'Beantworte in einem Test ALLE Fragen beim ersten Versuch richtig. Liegt ein Bauplan darauf, gehört er dir!',
+    ziel: s => [s.stats.testsPerfekt ?? 0, 1], lohn: { sterne: 30, joker: 1 }, hinweis: '.aktion-gross.quiz' },
+  { id: 'beobachten', icon: '🔍', titel: 'Wer bist du denn?', text: 'Tippe unten rechts auf die Lupe 🔍 und dann auf eine Ameise. Lerne sie kennen – mit Namen, Freundinnen und Träumen!',
+    ziel: s => [s.stats.beobachtet ?? 0, 1], lohn: { sterne: 20 }, hinweis: '.lupe-btn' },
   { id: 'erkunden1', icon: '🔭', titel: 'Ins Unbekannte', text: 'Wähle im Revier „🔭 Erkunden" und tippe in den Nebel. Deine Erkunderinnen entdecken neue Quellen!',
     ziel: s => [s.revier?.expeditionen ?? 0, 1], lohn: { sterne: 25 } },
   { id: 'forschung1', icon: '🔬', titel: 'Kluge Köpfe', text: 'Öffne die Forschung (🔬) und erforsche deine erste Technik. Forschungspunkte gibt es für richtige Quizantworten!',
     ziel: s => [s.forschung?.fertig.length ?? 0, 1], lohn: { sterne: 30, material: 10 } },
+  { id: 'ausbau1', icon: '⬆️', titel: 'Größer und schöner', text: 'Gewinne einen Ausbau-Bauplan (z. B. Wohnhöhle) und tippe im Nest auf das Gebäude: „Ausbauen".',
+    ziel: s => [s.stats.ausgebaut ?? 0, 1], lohn: { sterne: 40, material: 15 } },
+  { id: 'pollen', icon: '🌸', titel: 'Blütenstaub für die Brut', text: 'Schicke im Revier Sammlerinnen zu einer Blumenwiese 🌸, zu Kleeblüten ☘️ oder zum Löwenzahn 🌼. Pollen lässt die Brut schneller wachsen!',
+    ziel: s => [pollenTrupp(s) ? 1 : 0, 1], lohn: { sterne: 25, material: 10 } },
   { id: 'ersetzen', icon: '🔁', titel: 'Umbau-Profi', text: 'Baue eine Kammer direkt auf einen bestehenden Gang. Die Gangstücke bekommst du zurück!',
     ziel: s => [s.stats.ersetzt > 0 ? 1 : 0, 1], lohn: { sterne: 25 } },
   { id: 'richtig30', icon: '🎯', titel: 'Kluges Köpfchen', text: 'Beantworte insgesamt 30 Fragen richtig.',
     ziel: s => [s.lernen.richtig, 30], lohn: { sterne: 40, joker: 2 } },
   { id: 'huegel2', icon: '⛰️', titel: 'Der Hügel wächst', text: 'Baue den Ameisenhügel auf Stufe 2 aus (im Volk-Fenster links).',
     ziel: s => [s.world.hill, 2], lohn: { sterne: 30 }, hinweis: '[data-act="huegel"]' },
-  { id: 'faecher', icon: '🌈', titel: 'Entdeckerin', text: 'Spiele in mindestens 4 verschiedenen Fächern eine Quizrunde.',
+  { id: 'faecher', icon: '🌈', titel: 'Entdeckerin', text: 'Schreibe in mindestens 4 verschiedenen Fächern Tests (je mindestens 4 Fragen).',
     ziel: s => [Object.keys(FAECHER).filter(f => (s.lernen.proFach[f]?.n ?? 0) >= 4).length, 4], lohn: { sterne: 40, gang: 10 } },
   { id: 'pop40', icon: '🏡', titel: 'Ameisendorf', text: 'Erreiche 40 Ameisen.',
     ziel: s => [pop(s), 40], lohn: { sterne: 50 } },
@@ -47,13 +57,21 @@ export const MISSIONEN = [
     ziel: s => [s.revier?.vertrieben ?? 0, 1], lohn: { sterne: 30, material: 20 } },
   { id: 'karte25', icon: '🧭', titel: 'Kartografin', text: 'Erkunde ein Viertel des Reviers (25 %).',
     ziel: s => [Math.round((s.revier?.sicht.reduce((a, b) => a + b, 0) ?? 0) / (s.revier?.sicht.length ?? 1) * 100), 25], lohn: { sterne: 50, joker: 1 } },
+  { id: 'woche1', icon: '📅', titel: 'Eine ganze Schulwoche', text: 'Besuche alle 20 Stunden einer Schulwoche (Montag bis Freitag).',
+    ziel: s => [s.schule?.stunden ?? 0, 20], lohn: { sterne: 80, joker: 2 } },
   { id: 'serie5', icon: '🔥', titel: 'Heiße Serie', text: 'Beantworte 5 Fragen hintereinander richtig.',
     ziel: s => [s.lernen.besteSerie, 5], lohn: { sterne: 35, joker: 1 } },
-  { id: 'uni', icon: '🎓', titel: 'Ameisen-Universität', text: 'Baue eine Universität. Dann gibt es mehr Sterne im Quiz!',
+  { id: 'uni', icon: '🎓', titel: 'Ameisen-Universität', text: 'Baue deinen Kindergarten Schritt für Schritt aus: Schule → Berufsschule → Gymnasium → Universität!',
     ziel: s => [anz(s, 'universitaet'), 1], lohn: { sterne: 60 } },
+  { id: 'zelt1', icon: '⛺', titel: 'Zeltlager', text: 'Stelle mit dem Bauplan „Expeditions-Zelt" ein Zelt im Revier auf. Expeditionen starten dann von dort!',
+    ziel: s => [(s.revier?.lager ?? []).filter(l => l.bau >= 1).length, 1], lohn: { sterne: 40, material: 20 } },
+  { id: 'funde3', icon: '🧺', titel: 'Sammlerin von Schätzen', text: 'Bringe 3 Fundstücke ✨ aus dem Nebel nach Hause.',
+    ziel: s => [(s.revier?.sammlung ?? []).length, 3], lohn: { sterne: 50, joker: 1 } },
+  { id: 'welt1', icon: '🌍', titel: 'Die große Welt', text: 'Drücke zweimal Shift ⇧ (oder tippe oben auf „🌍 Welt") und schau dir die Weltkarte an.',
+    ziel: s => [s.welt?.besucht ? 1 : 0, 1], lohn: { sterne: 20 }, hinweis: '.ms-welt' },
   { id: 'schatz1', icon: '🎁', titel: 'Schatzsucherin', text: 'Im Nebel liegen geheimnisvolle Funde. Schicke eine Expedition genau zu einem 🎁 und bring den Schatz heim!',
     ziel: s => [s.revier?.gefunden ?? 0, 1], lohn: { sterne: 40 } },
-  { id: 'stadtleben', icon: '🏙️', titel: 'Stadtleben', text: 'Baue 3 Einrichtungen des Stadtlebens: z. B. Sporthalle, Eisladen, Schuhladen, Fühler-Salon, Schule, Theater oder Spielplatz.',
+  { id: 'stadtleben', icon: '🏙️', titel: 'Stadtleben', text: 'Baue 3 Einrichtungen des Stadtlebens: z. B. Sporthalle, Eisladen, Schuhladen, Fühler-Salon, Kindergarten, Theater oder Spielplatz.',
     ziel: s => [NEUE_BAUTEN.reduce((a, t) => a + anz(s, t), 0), 3], lohn: { sterne: 60 } },
   { id: 'denk5', icon: '🏅', titel: 'Denksport-Champion', text: 'Spiele 6 Denksport-Spiele.',
     ziel: s => [s.stats.minispiele, 6], lohn: { sterne: 50 } },
@@ -67,7 +85,7 @@ export const MISSIONEN = [
     ziel: s => [s.lernen.richtig, 150], lohn: { sterne: 100, joker: 3 } },
   { id: 'allefaecher', icon: '🏆', titel: 'Alleskönnerin', text: 'Beantworte in jedem der 6 Fächer mindestens 10 Fragen richtig.',
     ziel: s => [Object.keys(FAECHER).filter(f => (s.lernen.proFach[f]?.r ?? 0) >= 10).length, 6], lohn: { sterne: 120 } },
-  { id: 'hochzeit', icon: '🪽', titel: 'Der Hochzeitsflug', text: 'Baue einen Startplatz, ziehe 10 Drohnen groß und starte einen Hochzeitsflug.',
+  { id: 'hochzeit', icon: '🪽', titel: 'Der Hochzeitsflug', text: 'Baue einen Startplatz, ziehe 10 Drohnen groß, wähle auf der Weltkarte 🌍 ein Ziel und fliege durch die Ringe dorthin.',
     ziel: s => [s.stats.hochzeitsfluege, 1], lohn: { sterne: 150 } },
   { id: 'reich', icon: '👑', titel: 'Ein echtes Ameisenreich', text: 'Erreiche 200 Ameisen und Hügelstufe 5.',
     ziel: s => [Math.min(pop(s), 200) / 200 + Math.min(s.world.hill, 5) / 5, 2], lohn: { sterne: 300 } },

@@ -3,6 +3,8 @@ import { COLS, ROWS, GROUND, DEPTH, HILL_X, WATER_ROWS, C, GEBAEUDE, hillShape }
 import { mulberry32 } from '../util.js';
 
 export const idx = (x, y) => y * COLS + x;
+/** Größe eines Raums in Zellen. Räume merken sich ihre Maße (alte Spielstände & Ausbau behalten die Fläche). */
+export const raumMasse = r => { const G = GEBAEUDE[r.typ]; return { w: r.w ?? G.w, h: r.h ?? G.h }; };
 export const inBounds = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 
 export function createWorld(seed = 7) {
@@ -241,7 +243,7 @@ export function canPlace(world, rooms, typ, x, y) {
 
 /** Baut die Kammer ins Gitter ein. Gibt Liste ersetzter Gang-Indizes zurück. */
 export function placeRoom(world, room) {
-  const g = GEBAEUDE[room.typ];
+  const g = raumMasse(room);
   const ersetzt = [];
   for (let yy = room.y; yy < room.y + g.h; yy++) {
     for (let xx = room.x; xx < room.x + g.w; xx++) {
@@ -256,7 +258,7 @@ export function placeRoom(world, room) {
 }
 
 export function removeRoom(world, room) {
-  const g = GEBAEUDE[room.typ];
+  const g = { ...GEBAEUDE[room.typ], ...raumMasse(room) };
   const ers = new Set(room.ersetzt ?? []);
   for (let yy = room.y; yy < room.y + g.h; yy++) {
     for (let xx = room.x; xx < room.x + g.w; xx++) {
@@ -273,7 +275,7 @@ export function removeRoom(world, room) {
 export function rebuildRoomIndex(world, rooms) {
   world.raum.fill(-1);
   for (const r of rooms) {
-    const g = GEBAEUDE[r.typ];
+    const g = raumMasse(r);
     for (let yy = r.y; yy < r.y + g.h; yy++)
       for (let xx = r.x; xx < r.x + g.w; xx++) world.raum[idx(xx, yy)] = r.id;
   }

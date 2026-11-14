@@ -2,6 +2,10 @@
 import { shade, mulberry32 } from '../util.js';
 import { drawEgg, drawLarva, drawPupa } from './antdraw.js';
 import { drawEmoji, drawAntFast, cached, drawGlow } from './sprites.js';
+import {
+  rr, plank, bookshelf, steam, stufenWand, stufenLampe, stufenSterne,
+  AUSBAU_PROPS, AUSBAU_SURFACE, ausbauDynamic, bildungsTafel, EIGENES_LICHT,
+} from './raeumeAusbau.js';
 
 /** Emoji zeichnen (über Sprite-Cache – Farb-Emojis zu rastern ist teuer). */
 export const emoji = drawEmoji;
@@ -10,37 +14,6 @@ const drawAnt = drawAntFast;
 const EI = () => cached('ei', 8, 10, c => drawEgg(c, 4, 5, 3), 4);
 const LARVE = () => cached('larve', 10, 9, c => drawLarva(c, 5, 4.5, 3.6, 0), 4);
 const PUPPE = () => cached('puppe', 11, 8, c => drawPupa(c, 5.5, 4, 3.6), 4);
-
-function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
-
-function plank(ctx, x, y, w, h, c = '#a8743f') {
-  const g = ctx.createLinearGradient(0, y, 0, y + h);
-  g.addColorStop(0, shade(c, 0.25)); g.addColorStop(1, shade(c, -0.25));
-  ctx.fillStyle = g;
-  rr(ctx, x, y, w, h, Math.min(3, h / 2)); ctx.fill();
-}
-
-function bookshelf(ctx, x, y, w, h, seed) {
-  const rnd = mulberry32(seed);
-  plank(ctx, x, y, w, h, '#7a4d2a');
-  ctx.fillStyle = 'rgba(30,15,5,.55)';
-  ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
-  const rows = Math.max(1, Math.floor((h - 6) / 13));
-  const rh = (h - 6) / rows;
-  const cols = ['#e85a5a', '#4f9bff', '#ffd04d', '#59c977', '#b07cff', '#ff9f43', '#f2f2f2', '#2fbfb4'];
-  for (let r = 0; r < rows; r++) {
-    let bx = x + 4;
-    const by = y + 3 + r * rh;
-    while (bx < x + w - 6) {
-      const bw = 2 + rnd() * 3, bh = rh * (0.6 + rnd() * 0.35);
-      ctx.fillStyle = cols[(rnd() * cols.length) | 0];
-      ctx.fillRect(bx, by + rh - bh - 1, bw, bh);
-      bx += bw + 0.8;
-    }
-    ctx.fillStyle = '#5e3a1e';
-    ctx.fillRect(x + 3, by + rh - 1.5, w - 6, 2);
-  }
-}
 
 function sign(ctx, cx, y, icon) {
   ctx.strokeStyle = 'rgba(60,40,20,.8)';
@@ -64,6 +37,18 @@ export function lampPositions(room, g, rx, ry, rw) {
   const out = [];
   for (let i = 0; i < n; i++) out.push([rx + rw * (n === 1 ? 0.5 : 0.28 + i * 0.44), ry + 14]);
   return out;
+}
+
+/** Leinwand des einfachen Kinos – unterhalb von Schild und Sternen. */
+function kinoBasis(rx, ry, rw, rh) {
+  const sy = ry + 28, fy = ry + rh - 13;
+  return { sx: rx + 20, sy, sw: rw - 40, sh: Math.max(16, Math.min(30, fy - 14 - sy)) };
+}
+
+/** Tafel-Layout der Universität (auch für die Kreide-Animation). */
+function uniLayout(rx, ry, rw, rh) {
+  const sw = Math.max(14, Math.round(rw * 0.14));
+  return { ...bildungsTafel(rx, ry, rw, rh, sw + 4), sw };
 }
 
 export function drawRoomStatic(ctx, room, g, rx, ry, rw, rh) {
@@ -104,11 +89,18 @@ export function drawRoomStatic(ctx, room, g, rx, ry, rw, rh) {
     return;
   }
   const cx = rx + rw / 2;
-  const P = PROPS[room.typ];
-  if (P) P(ctx, { rx, ry, rw, rh, fy, cx, rnd, g, room });
+  const p = { rx, ry, rw, rh, fy, cx, rnd, g, room, basis: PROPS };
+  // Ausbaustufen: edlere Wände (Tapete, Vertäfelung, Goldleisten)
+  if ((g.lstufe ?? 1) >= 2) stufenWand(ctx, p);
+  const P = PROPS[room.typ] ?? AUSBAU_PROPS[room.typ];
+  if (P) P(ctx, p);
   ctx.restore();
   sign(ctx, rx + 18, ry + 2, g.icon);
-  for (const [lx, ly] of lampPositions(room, g, rx, ry, rw)) lampe(ctx, lx, ly);
+  stufenSterne(ctx, rx + 18, ry + 22, g.lstufe ?? 1, g.lmax ?? 1);
+  if (!EIGENES_LICHT.has(room.typ)) for (const [lx, ly] of lampPositions(room, g, rx, ry, rw)) {
+    if ((g.lstufe ?? 1) >= 2) stufenLampe(ctx, lx, ly, g.lstufe);
+    else lampe(ctx, lx, ly);
+  }
 }
 
 function drawConstructionStatic(ctx, rx, ry, rw, rh, fy, rnd) {
@@ -210,7 +202,16 @@ Object.assign(PROPS, {
     ctx.fillStyle = 'rgba(255,255,255,.25)';
     for (let i = 0; i < 25; i++) { ctx.beginPath(); ctx.arc(rx + 10 + rnd() * (rw - 20), fy - rnd() * 6, 1.2, 0, 7); ctx.fill(); }
   },
-  kita(ctx, { rx, rw, fy }) {
+  kita(ctx, { rx, ry, rw, fy }) {
+    // Kinderbilder an der Wand (wo Platz ist)
+    for (let x = rx + 34, i = 0; x + 12 < rx + rw * 0.42 && fy - ry > 40; x += 17, i++) {
+      const y = ry + 22 + (i % 2) * 3;
+      ctx.fillStyle = '#fbfbf6'; ctx.fillRect(x, y, 12, 10);
+      ctx.fillStyle = ['#ffd93d', '#ff6b6b', '#4d96ff'][i % 3]; ctx.beginPath(); ctx.arc(x + 9, y + 3, 2, 0, 7); ctx.fill();
+      ctx.fillStyle = '#6bcB77'; ctx.fillRect(x + 1, y + 7, 10, 2.5);
+      ctx.fillStyle = '#e04848'; ctx.fillRect(x + 3, y + 4, 4, 3.5);
+    }
+    if (rw > 140) for (let x = rx + rw * 0.78, i = 0; x + 12 < rx + rw - 14; x += 16, i++) { ctx.fillStyle = ['#ffd93d', '#6bcB77', '#4d96ff'][i % 3]; ctx.beginPath(); ctx.roundRect(x, ry + 30, 10, 10, 2); ctx.fill(); ctx.fillStyle = '#fff'; ctx.font = 'bold 7px Fredoka, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('ABC'[i % 3], x + 5, ry + 38); }
     const cols = ['#ff6b6b', '#ffd93d', '#6bcB77', '#4d96ff'];
     for (let i = 0; i < 4; i++) { ctx.fillStyle = cols[i]; ctx.fillRect(rx + 12 + i * ((rw - 24) / 4), fy + 1, (rw - 24) / 4, 4); }
     emoji(ctx, '🧸', rx + 20, fy, 14);
@@ -263,12 +264,13 @@ Object.assign(PROPS, {
       emoji(ctx, '🍽️', x, fy - 15, 9);
     }
   },
-  kino(ctx, { rx, rw, fy, ry }) {
+  kino(ctx, { rx, rw, rh, fy, ry }) {
     // Leinwand-Rahmen
+    const k = kinoBasis(rx, ry, rw, rh);
     ctx.fillStyle = '#8a1f2e';
-    rr(ctx, rx + 14, ry + 14, rw - 28, 40, 4); ctx.fill();
+    rr(ctx, k.sx - 6, k.sy - 4, k.sw + 12, k.sh + 8, 4); ctx.fill();
     ctx.fillStyle = '#f5f0e6';
-    ctx.fillRect(rx + 20, ry + 18, rw - 40, 32);
+    ctx.fillRect(k.sx, k.sy, k.sw, k.sh);
     // Sitzreihen
     for (let row = 0; row < 2; row++) {
       for (let x = rx + 16 + row * 6; x < rx + rw - 16; x += 13) {
@@ -303,21 +305,39 @@ Object.assign(PROPS, {
       ctx.fillStyle = '#ff9f43'; ctx.fillRect(x - 3, fy - 10, 11, 3);
     }
   },
-  universitaet(ctx, { rx, rw, fy, ry, room }) {
-    // Tafel
-    const bx = rx + rw * 0.32, bw = rw * 0.42;
-    ctx.fillStyle = '#7a4d2a'; rr(ctx, bx - 3, ry + 16, bw + 6, 36, 3); ctx.fill();
-    ctx.fillStyle = '#1f4a38'; ctx.fillRect(bx, ry + 19, bw, 30);
+  universitaet(ctx, { rx, ry, rw, rh, fy, room }) {
+    const R = rx + rw, b = uniLayout(rx, ry, rw, rh);
+    // Regale links (unter dem Schild) & rechts
+    bookshelf(ctx, rx + 9, ry + 28, 21, fy - ry - 28, room.id + 3);
+    bookshelf(ctx, R - 10 - b.sw, ry + 13, b.sw, fy - ry - 13, room.id + 5);
+    emoji(ctx, '🎓', R - 10 - b.sw / 2, ry + 14, 10);
+    // Tafel mit Goldrahmen
+    ctx.fillStyle = '#c9952a'; rr(ctx, b.x - 3, b.y - 3, b.w + 6, b.h + 6, 3); ctx.fill();
+    ctx.fillStyle = '#f2cf6a'; ctx.fillRect(b.x - 3, b.y - 3, b.w + 6, 1);
+    ctx.fillStyle = '#1f4a38'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x + 1, b.y, b.w - 2, b.h); ctx.clip();
     ctx.fillStyle = 'rgba(255,255,255,.85)';
-    ctx.font = '8px "Comic Sans MS", Fredoka, sans-serif'; ctx.textAlign = 'left';
-    ctx.fillText('7 · 8 = 56', bx + 5, ry + 29);
-    ctx.fillText('Ameise → Nomen', bx + 5, ry + 39);
-    ctx.fillText('H₂O 💧', bx + 5, ry + 47);
-    // Pult
-    plank(ctx, bx + bw * 0.4, fy - 16, 18, 16, '#9a6a3c');
-    bookshelf(ctx, rx + 10, ry + 22, rw * 0.18, fy - ry - 22, room.id + 3);
-    bookshelf(ctx, rx + rw * 0.79, ry + 22, rw * 0.13, fy - ry - 22, room.id + 5);
-    emoji(ctx, '🎓', rx + rw - 22, ry + 22, 11);
+    ctx.font = '7px "Comic Sans MS", Fredoka, sans-serif'; ctx.textAlign = 'left';
+    const zeilen = ['7 · 8 = 56', 'Ameise → Nomen', 'H₂O 💧  E = m·c²', '1 km = 1000 m'];
+    const n = Math.max(1, Math.floor((b.h - 2) / 8));
+    for (let i = 0; i < Math.min(n, zeilen.length); i++) ctx.fillText(zeilen[i], b.x + 4, b.y + 8 + i * 8);
+    ctx.restore();
+    ctx.fillStyle = '#a8781a'; ctx.fillRect(b.x - 2, b.y + b.h + 1, b.w + 4, 2);
+    // Rednerpult & Hörsaal-Bänke
+    const px = b.x + b.w * 0.5, frei = fy - (b.y + b.h);
+    if (frei > 24) {
+      for (let r = 0; r < 2; r++) {
+        const y = fy - r * 8;
+        for (let x = b.x + 2 + r * 4; x + 12 < R - 12 - b.sw; x += 15) {
+          if (Math.abs(x + 6 - px) < 12 && r === 0) continue;
+          plank(ctx, x, y - 6, 12, 2.5, r ? '#8a5530' : '#a8743f');
+          ctx.fillStyle = '#6b3f22'; ctx.fillRect(x + 1, y - 4, 1.5, 4); ctx.fillRect(x + 9.5, y - 4, 1.5, 4);
+        }
+      }
+    }
+    plank(ctx, px - 8, fy - 15, 16, 15, '#7a4a28');
+    ctx.fillStyle = '#e2b048'; ctx.fillRect(px - 8, fy - 15, 16, 1.2);
+    emoji(ctx, '🐜', px, fy - 4, 7);
   },
   einkauf(ctx, { rx, rw, fy, ry }) {
     const cols = [['#ff6b8b', '#fff'], ['#4fb4ff', '#fff'], ['#ffc93c', '#fff'], ['#6bd36b', '#fff']];
@@ -390,16 +410,26 @@ Object.assign(PROPS, {
     }
     emoji(ctx, '✂️', rx + rw - 12, fy - 2, 10);
   },
-  schule(ctx, { rx, rw, fy, ry }) {
-    const bx = rx + 16, bw = rw * 0.55;
-    ctx.fillStyle = '#7a4d2a'; rr(ctx, bx - 3, ry + 12, bw + 6, 30, 3); ctx.fill();
-    ctx.fillStyle = '#245a40'; ctx.fillRect(bx, ry + 15, bw, 24);
+  schule(ctx, { rx, ry, rw, rh, fy }) {
+    const R = rx + rw, rechts = rw >= 120 ? 20 : 0;
+    const b = bildungsTafel(rx, ry, rw, rh, rechts);
+    ctx.fillStyle = '#7a4d2a'; rr(ctx, b.x - 3, b.y - 3, b.w + 6, b.h + 6, 3); ctx.fill();
+    ctx.fillStyle = '#245a40'; ctx.fillRect(b.x, b.y, b.w, b.h);
+    ctx.save(); ctx.beginPath(); ctx.rect(b.x + 1, b.y, b.w - 2, b.h); ctx.clip();
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '8px "Comic Sans MS", Fredoka, sans-serif'; ctx.textAlign = 'left';
-    ctx.fillText('A B C  1 2 3', bx + 4, ry + 25); ctx.fillText('🐜 + 🐜 = 2', bx + 4, ry + 35);
-    // Bänke
-    for (let i = 0; i < 3; i++) plank(ctx, rx + 18 + i * 22, fy - 8, 16, 4, '#c58b52');
-    emoji(ctx, '🎒', rx + rw - 18, fy, 12);
-    emoji(ctx, '🌍', rx + rw - 18, ry + 30, 12);
+    ctx.fillText('A B C  1 2 3', b.x + 4, b.y + 8.5);
+    if (b.h >= 18) ctx.fillText('🐜 + 🐜 = 2', b.x + 4, b.y + 17);
+    ctx.restore();
+    ctx.fillStyle = '#8a5a30'; ctx.fillRect(b.x - 2, b.y + b.h + 1, b.w + 4, 2);
+    // Bänke mit Stühlen
+    for (let x = rx + 34; x + 14 <= R - 16 - (rechts ? 0 : 12); x += 20) {
+      plank(ctx, x, fy - 9, 14, 3, '#c58b52');
+      ctx.fillStyle = '#8a5a30'; ctx.fillRect(x + 1.5, fy - 6, 1.5, 6); ctx.fillRect(x + 11, fy - 6, 1.5, 6);
+      ctx.fillStyle = '#4f9bff'; rr(ctx, x - 4, fy - 11, 3, 11, 1); ctx.fill();
+    }
+    emoji(ctx, '🎒', rx + 19, fy, 11);
+    if (rechts) emoji(ctx, '🌍', R - 12 - rechts / 2, b.y + b.h * 0.72, 12);
+    else emoji(ctx, '🌍', R - 19, fy, 10);
   },
   wache(ctx, { rx, rw, fy, ry }) {
     // Wappen & Speere (aus Tannennadeln)
@@ -495,6 +525,14 @@ function drawSurfaceStatic(ctx, room, g, rx, ry, rw, rh, fertig) {
     emoji(ctx, '🚧', rx + rw / 2, fy - 4, 16);
     return;
   }
+  const A = AUSBAU_SURFACE[room.typ];
+  if (A) A(ctx, { rx, ry, rw, rh, fy, cx: rx + rw / 2, room });
+  else drawSurfaceBasis(ctx, room, g, rx, ry, rw, rh, fy);
+  // Stufen-Sterne auf einem kleinen Wimpel-Schild
+  if ((g.lmax ?? 1) > 1) stufenSterne(ctx, rx + 4 + g.lmax * 3, ry + 1, g.lstufe ?? 1, g.lmax);
+}
+
+function drawSurfaceBasis(ctx, room, g, rx, ry, rw, rh, fy) {
   if (room.typ === 'fussball') {
     const top = fy - 18;
     for (let i = 0; i < 8; i++) {
@@ -591,12 +629,11 @@ export function drawRoomDynamic(ctx, room, g, rx, ry, rw, rh, info) {
   const fy = g.zone === 'oberflaeche' ? ry + rh : ry + rh - 13;
   const cx = rx + rw / 2;
   if (room.bau < 1) return;
+  if (g.linie === 'koenigin' || room.typ === 'koenigin') {
+    const breathe = Math.sin(t * 1.5) * 0.6;
+    drawAnt(ctx, { x: cx - 8, y: fy - 8 + breathe, L: 46, dir: 1, rolle: 'koenigin', phase: t * 1.2, walking: false });
+  }
   switch (room.typ) {
-    case 'koenigin': {
-      const breathe = Math.sin(t * 1.5) * 0.6;
-      drawAnt(ctx, { x: cx - 8, y: fy - 8 + breathe, L: 46, dir: 1, rolle: 'koenigin', phase: t * 1.2, walking: false });
-      break;
-    }
     case 'pilz': {
       ctx.fillStyle = 'rgba(230,210,255,.6)';
       for (let i = 0; i < 8; i++) {
@@ -616,7 +653,7 @@ export function drawRoomDynamic(ctx, room, g, rx, ry, rw, rh, info) {
     }
     case 'restaurant': steam(ctx, rx + 18, fy - 20, t); if (rw > 100) steam(ctx, rx + 86, fy - 20, t + 1.3); break;
     case 'kino': {
-      const sx = rx + 20, sy = ry + 18, sw = rw - 40, sh = 32;
+      const { sx, sy, sw, sh } = kinoBasis(rx, ry, rw, rh);
       const hue = (t * 40) % 360;
       ctx.fillStyle = `hsl(${hue},70%,72%)`;
       ctx.fillRect(sx, sy, sw, sh);
@@ -799,11 +836,13 @@ export function drawRoomDynamic(ctx, room, g, rx, ry, rw, rh, info) {
     }
     case 'universitaet': {
       if (Math.sin(t * 3) > 0) {
+        const b = uniLayout(rx, ry, rw, rh);
         ctx.fillStyle = '#fff';
-        ctx.fillRect(rx + rw * 0.32 + 5 + ((t * 10) % (rw * 0.3)), ry + 45, 3, 1);
+        ctx.fillRect(b.x + 5 + ((t * 10) % (b.w * 0.6)), b.y + b.h - 4, 3, 1);
       }
       break;
     }
+    default: ausbauDynamic(ctx, room, g, rx, ry, rw, rh, t);
   }
   // Brut anzeigen
   if (info.brut) {
@@ -811,8 +850,9 @@ export function drawRoomDynamic(ctx, room, g, rx, ry, rw, rh, info) {
     for (let i = 0; i < info.brut.ei; i++) items.push('ei');
     for (let i = 0; i < info.brut.larve; i++) items.push('larve');
     for (let i = 0; i < info.brut.puppe; i++) items.push('puppe');
-    const startX = room.typ === 'koenigin' ? rx + 14 : rx + 12;
-    const maxW = room.typ === 'koenigin' ? rw * 0.35 : rw - 24;
+    const koenigin = g.linie === 'koenigin' || room.typ === 'koenigin';
+    const startX = koenigin ? rx + 14 : rx + 12;
+    const maxW = koenigin ? rw * 0.35 : rw - 24;
     const perRow = Math.max(1, Math.floor(maxW / 8));
     items.forEach((it, i) => {
       const x = startX + (i % perRow) * 8 + 4;
@@ -821,13 +861,5 @@ export function drawRoomDynamic(ctx, room, g, rx, ry, rw, rh, info) {
       else if (it === 'larve') { ctx.save(); ctx.translate(x, y - 1); ctx.rotate(Math.sin(t * 2 + x) * 0.15); ctx.drawImage(LARVE(), -5, -4.5, 10, 9); ctx.restore(); }
       else ctx.drawImage(PUPPE(), x - 5.5, y - 5, 11, 8);
     });
-  }
-}
-
-function steam(ctx, x, y, t) {
-  for (let i = 0; i < 3; i++) {
-    const p = (t * 0.6 + i / 3) % 1;
-    ctx.fillStyle = `rgba(255,255,255,${0.35 * (1 - p)})`;
-    ctx.beginPath(); ctx.arc(x + Math.sin(p * 6 + i) * 3, y - p * 16, 2 + p * 3, 0, 7); ctx.fill();
   }
 }
