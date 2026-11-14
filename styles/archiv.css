@@ -4,7 +4,7 @@
 .atip {
   --f1: #ff9f1c; --f2: #ffc93c;
   --tt-papier: #fffaf0; --tt-papier-2: #f8ead2; --tt-rand: #efd5a8;
-  position: fixed; left: 0; top: 0; z-index: 75; width: min(372px, calc(100vw - 20px));
+  position: fixed; left: 0; top: 0; z-index: 115; width: min(372px, calc(100vw - 20px));
   color: #3a2614; font-family: var(--font); user-select: text; -webkit-user-select: text; touch-action: auto;
   will-change: transform;
 }
