@@ -1949,9 +1949,13 @@ const lp = {
   blattlaushof: (rx, rw, rh) => [[rx + rw * 0.55, rh - 12], [rx + rw - 16, rh - 8]],
   molkerei: (rx, rw, rh) => [[rx + rw - 9, rh - 18]],
 };
+const bahnCache = new Map();
 export function bahnPunkte(rw, rh) {
-  // Achterbahn (relativ zu rx/ry)
+  // Achterbahn (relativ zu rx/ry) – pro Raumgröße nur einmal berechnet
+  const key = rw + 'x' + rh;
+  if (bahnCache.has(key)) return bahnCache.get(key);
   const p = [], fy = rh;
+  bahnCache.set(key, p);
   const q = (x0, y0, cx, cy, x1, y1, n = 14) => { for (let i = p.length ? 1 : 0; i <= n; i++) { const t = i / n; p.push([(1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t * t * x1, (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t * t * y1]); } };
   q(4, fy - 8, rw * 0.2, fy - rh * 1.25, rw * 0.4, fy - 8);
   const lr = Math.min(13, rh * 0.22), lx = rw * 0.57;
