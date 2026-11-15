@@ -1,11 +1,12 @@
 // Haupt-Renderer: Himmel, Gelände, Kammern, Ameisen, Partikel, Bau-Vorschau.
-import { TILE as T, COLS, ROWS, GROUND, HILL_X, C, GEBAEUDE, SIM } from '../game/config.js';
+import { TILE as T, COLS, ROWS, GROUND, HILL_X, C, GEBAEUDE, SIM, hillShape } from '../game/config.js';
 import { Terrain, W, H, RES, hillSurfaceY } from './terrain.js';
 import { drawRoomDynamic, lampPositions, emoji } from './rooms.js';
 import { drawGlow } from './sprites.js';
 import { Agents } from './agents.js';
 import { canDig, canPlace, get, idx, raumMasse } from '../game/world.js';
 import { mulberry32, clamp, lerp } from '../util.js';
+import { baueKulisse, baueBewuchs, zeichneInsekten } from './kulisse.js';
 
 const SKY = [
   // phase, oben, unten
@@ -29,6 +30,13 @@ function skyAt(p) {
   return [SKY[0][1], SKY[0][2]];
 }
 const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+/** Wie stark der Tageshimmel der Gegend durchscheint (0 nachts & bei Sonnenauf-/-untergang). */
+function tagLicht(p) {
+  if (p < 0.03 || p > 0.64) return 0;
+  if (p < 0.09) return (p - 0.03) / 0.06;
+  if (p > 0.55) return (0.64 - p) / 0.09;
+  return 1;
+}
 
 export class Renderer {
   constructor(canvas) {
@@ -48,10 +56,31 @@ export class Renderer {
 
   setState(state) {
     this.state = state;
-    this.terrain = new Terrain(state.world.seed);
+    // Gegend der Kolonie: Boden, Hügel, Himmel, Hintergrund & Bewuchs hängen davon ab
+    const key = state.world.biom ?? 'heim';
+    this.biomKey = key;
+    this.terrain = new Terrain(state.world.seed, key);
+    this.kulisse = key === 'heim' ? null : baueKulisse(key);
     this.agents.reset();
+    this.worldCacheKey = ''; // Zwischenspeicher gehört zur alten Kolonie
+    this.grassKey = null;
     this.makeGrass(state.world.seed);
     this.focusHome();
+  }
+
+  /** Wo vor dem Hügel / vor Oberflächen-Gebäuden nichts Großes wachsen darf (Weltpixel). */
+  bewuchsFrei() {
+    const st = this.state, out = [];
+    if (st.world.hill > 0) {
+      const { w } = hillShape(st.world.hill), cx = (HILL_X + 0.5) * T, rx = (w + 0.55) * T;
+      out.push([cx - rx, cx + rx]);
+    }
+    for (const r of st.rooms) {
+      if (GEBAEUDE[r.typ]?.zone !== 'oberflaeche') continue;
+      const m = raumMasse(r);
+      out.push([r.x * T - 4, (r.x + m.w) * T + 4]);
+    }
+    return out;
   }
 
   focusHome() {
@@ -134,6 +163,14 @@ export class Renderer {
   }
 
   makeGrass(seed) {
+    if (this.kulisse) {
+      // andere Gegend: eigener Bewuchs, keine Heimat-Bäume (die stehen in der Kulisse)
+      const frei = this.bewuchsFrei();
+      this.grassKey = this.biomKey + '|' + frei.map(([a, b]) => `${a | 0}-${b | 0}`).join(',');
+      this.grass = baueBewuchs(this.biomKey, seed, RES, frei);
+      this.trees = [];
+      return;
+    }
     const rnd = mulberry32(seed + 5);
     const cv = document.createElement('canvas');
     const h = 46;
@@ -213,7 +250,14 @@ export class Renderer {
     if (!st) return;
     this.t += dt;
     const t = this.t;
-    if (this.terrain.rebuild(st)) this.frontierVersion = -1;
+    if (this.terrain.rebuild(st)) {
+      this.frontierVersion = -1;
+      // Hügel gewachsen oder Oberflächen-Gebäude dazu? Dann den Bewuchs davor neu setzen.
+      if (this.kulisse) {
+        const frei = this.bewuchsFrei();
+        if (this.grassKey !== this.biomKey + '|' + frei.map(([a, b]) => `${a | 0}-${b | 0}`).join(',')) this.makeGrass(st.world.seed);
+      }
+    }
     this.agents.update(dt, st, d);
     const ctx = this.ctx;
     const { z } = this.cam;
@@ -224,7 +268,13 @@ export class Renderer {
 
     // ---- Himmel (Bildschirmraum) ----
     const phase = d.tagPhase;
-    const [top, bot] = skyAt(phase);
+    let [top, bot] = skyAt(phase);
+    const K = this.kulisse;
+    if (K) {
+      const k = tagLicht(phase) * 0.9;
+      top = top.map((v, i) => Math.round(lerp(v, K.himmel.oben[i], k)));
+      bot = bot.map((v, i) => Math.round(lerp(v, K.himmel.unten[i], k)));
+    }
     const groundScreenY = (GROUND * T - this.cam.y) * z;
     const sg = ctx.createLinearGradient(0, Math.min(0, groundScreenY - 700 * z), 0, groundScreenY);
     sg.addColorStop(0, rgb(top)); sg.addColorStop(1, rgb(bot));
@@ -263,8 +313,9 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
     }
-    // Ferne Hügel (Parallaxe)
-    this.drawFarHills(ctx, groundScreenY, night);
+    // Ferne Hügel (Parallaxe) – in anderen Gegenden vorgemalte Panoramen
+    if (K) this.drawPano(ctx, groundScreenY, night);
+    else this.drawFarHills(ctx, groundScreenY, night);
     // Wolken
     for (const c of this.clouds) {
       c.x += c.v * dt;
@@ -282,6 +333,8 @@ export class Renderer {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.drawImage(this.staticLayer(view), 0, 0);
     ctx.setTransform(dpr * z, 0, 0, dpr * z, -this.cam.x * z * dpr, -this.cam.y * z * dpr);
+    // kleine Bewegungen der Gegend (Wasserfall, Schaukel, Leuchtpilze …)
+    if (K?.anim) K.anim(ctx, t, night, view);
     // Wasser-Glitzern
     this.drawWaterShimmer(ctx, view, t);
 
@@ -337,7 +390,8 @@ export class Renderer {
       ctx.fillStyle = `rgba(10,15,50,${night * 0.45})`;
       ctx.fillRect(view.x0 - 10, view.y0 - 10, view.x1 - view.x0 + 20, GROUND * T - view.y0 + 10);
       this.drawFireflies(ctx, t, night);
-    } else this.drawButterflies(ctx, t);
+    } else if (!K || K.insekten === 'falter') this.drawButterflies(ctx, t);
+    else zeichneInsekten(ctx, K.insekten, t);
     // Tiefen-Dunkel unten
     const dg = ctx.createLinearGradient(0, GROUND * T, 0, H);
     dg.addColorStop(0, 'rgba(10,5,0,0)'); dg.addColorStop(1, 'rgba(10,5,0,.35)');
@@ -385,6 +439,13 @@ export class Renderer {
       if (x > view.x1 || x + w < view.x0 || y > view.y1 || y + h < view.y0) continue;
       c.drawImage(tr.img, x, y, w, h);
     }
+    // Wahrzeichen der Gegend (vorgemalt, Weltkoordinaten) – nur den sichtbaren Ausschnitt
+    const N = this.kulisse?.nah;
+    if (N) {
+      const nx0 = clamp(Math.floor(view.x0) - 2, N.x0, N.x1), ny0 = clamp(Math.floor(view.y0) - 2, N.y0, N.y1);
+      const nx1 = clamp(Math.ceil(view.x1) + 2, N.x0, N.x1), ny1 = clamp(Math.ceil(view.y1) + 2, N.y0, N.y1);
+      if (nx1 > nx0 && ny1 > ny0) c.drawImage(N.img, (nx0 - N.x0) * N.s, (ny0 - N.y0) * N.s, (nx1 - nx0) * N.s, (ny1 - ny0) * N.s, nx0, ny0, nx1 - nx0, ny1 - ny0);
+    }
     // Nur den sichtbaren Ausschnitt des großen Geländebildes kopieren
     const x0 = clamp(Math.floor(view.x0) - 2, 0, W), y0 = clamp(Math.floor(view.y0) - 2, 0, H);
     const x1 = clamp(Math.ceil(view.x1) + 2, 0, W), y1 = clamp(Math.ceil(view.y1) + 2, 0, H);
@@ -394,6 +455,28 @@ export class Renderer {
       c.drawImage(this.grass.img, x0 * RES, 0, (x1 - x0) * RES, this.grass.img.height, x0, gy, x1 - x0, this.grass.h);
     }
     return this.worldCache;
+  }
+
+  /** Vorgemalte Panoramen (fern & mitte) mit Parallaxe; nachts überblendet in die dunkle Fassung. */
+  drawPano(ctx, gy, night) {
+    const z = this.cam.z;
+    for (const L of [this.kulisse.fern, this.kulisse.mitte]) {
+      if (!L) continue;
+      const x = (L.u0 - this.cam.x * L.par) * z, y = gy - L.G * z, w = L.w * z, h = L.h * z;
+      // nur den sichtbaren Streifen kopieren; ganz Tag/Nacht → nur eine Fassung
+      const k = L.tag.width / L.w;
+      const u0 = clamp(-x / z, 0, L.w), u1 = clamp((this.vw - x) / z, 0, L.w);
+      if (u1 <= u0) continue;
+      const sx = u0 * k, sw = (u1 - u0) * k, dx = x + u0 * z, dw = (u1 - u0) * z;
+      if (night < 0.98) ctx.drawImage(L.tag, sx, 0, sw, L.tag.height, dx, y, dw, h);
+      if (night > 0.02) { ctx.globalAlpha = night < 0.98 ? night : 1; ctx.drawImage(L.nacht, sx, 0, sw, L.tag.height, dx, y, dw, h); ctx.globalAlpha = 1; }
+      // unterhalb des Panoramas (nur außerhalb der Welt sichtbar) mit der Bodenfarbe auffüllen
+      if (y + h < this.vh) {
+        const k = 1 - night * 0.6;
+        ctx.fillStyle = `rgb(${L.boden[0] * k | 0},${L.boden[1] * k | 0},${L.boden[2] * k | 0})`;
+        ctx.fillRect(0, y + h - 1, this.vw, this.vh - y - h + 1);
+      }
+    }
   }
 
   drawFarHills(ctx, gy, night) {

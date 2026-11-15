@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Test: Wespenalarm</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/minigames.css">
+  <link rel="stylesheet" href="../styles/wespen.css">
+  <style>
+    body { display: grid; place-items: center; background: #3a2614; overflow: auto; }
+    .test { display: flex; flex-direction: column; gap: 12px; align-items: center; padding: 20px; max-width: 900px; }
+    .test pre { background: rgba(0,0,0,.3); padding: 10px 14px; border-radius: 12px; min-width: 320px; white-space: pre-wrap; }
+    .knoepfe { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .hinweis { color: #e9d6bd; font-size: .9rem; text-align: center; }
+    /* Debug-Leiste: liegt über dem Spiel-Fenster */
+    #dbg { position: fixed; left: 8px; bottom: 8px; z-index: 9999; font: 600 12px/1.2 system-ui, sans-serif; color: #fff; }
+    #dbg summary { cursor: pointer; background: rgba(0,0,0,.65); padding: 6px 10px; border-radius: 10px; list-style: none; width: max-content; }
+    #dbg .reihe { display: flex; flex-wrap: wrap; gap: 4px; max-width: 470px; background: rgba(0,0,0,.65); padding: 8px; border-radius: 10px; margin-top: 4px; }
+    #dbg button { background: #fff4dc; color: #3a2614; border-radius: 8px; padding: 4px 7px; font: 600 12px system-ui, sans-serif; }
+    #dbg button.an { background: #8ef08a; }
+  </style>
+</head>
+<body>
+  <!-- Entwickler-Werkzeug: startet den Wespenalarm-Flug ohne das restliche Spiel.
+       URL-Parameter: ?szenario=nah|weit|schwarm|party|boss|uebung|scheitern  &auto=1 (Autopilot + sofort los)
+       &tempo=2 (Zeitraffer)  &nichts=1 (sofort los, aber gar nicht steuern) -->
+  <div class="test">
+    <h1>🐝 Wespenalarm – Testseite</h1>
+    <div class="knoepfe" id="szenarien"></div>
+    <p class="hinweis">Unten links: 🛠️ Debug-Leiste (Power-ups geben, Boss, Alarm …). URL: <code>?szenario=boss&amp;auto=1&amp;tempo=2</code></p>
+    <pre id="out">Noch kein Flug.</pre>
+  </div>
+  <details id="dbg">
+    <summary>🛠️ Debug</summary>
+    <div class="reihe" id="dbg-pu"></div>
+    <div class="reihe" id="dbg-mehr"></div>
+  </details>
+  <div id="modal-root"></div>
+  <div id="toasts"></div>
+  <script type="module">
+    import { openWespenalarm } from '../src/ui/wespenalarm.js';
+    import { topModal, closeTop } from '../src/ui/modal.js';
+    const pausen = { n: 0, max: 0 };
+    const fakeGame = { pause(an) { pausen.n += an ? 1 : -1; pausen.max = Math.max(pausen.max, pausen.n); } };
+    // wie input.js im Spiel: Modal-Tasten zuerst, sonst Esc schließt
+    window.addEventListener('keydown', e => {
+      const m = topModal();
+      if (m?._key && m._key(e)) { e.preventDefault(); return; }
+      if (m && e.key === 'Escape') closeTop();
+    });
+    const SZ = {
+      nah: { label: 'Nah (leicht)', klasse: 'gruen', o: { dauer: 50, wespen: 0.9, powerups: 1.3, mut: 1.3, wind: false, name: 'Sonnige Lichtung', koloniename: 'Krabbelburg' } },
+      weit: { label: 'Weit + Wind (mit Boss)', klasse: 'pink', o: { dauer: 85, wespen: 1.4, powerups: 1.3, mut: 1.1, wind: true, name: 'Großer Eichenwald' } },
+      schwarm: { label: 'Wespen-Schwarm', klasse: '', o: { dauer: 60, wespen: 2.4, powerups: 1.6, mut: 1.3, wind: false, name: 'Summende Senke' } },
+      party: { label: 'Power-up-Party', klasse: 'lila', alle: true, o: { dauer: 55, wespen: 1.7, powerups: 2.2, mut: 1.2, wind: false, name: 'Blumenhügel' } },
+      boss: { label: 'Boss-Wespe', klasse: 'pink', o: { dauer: 45, wespen: 1.2, powerups: 1.4, mut: 1.4, wind: false, boss: true, bossBei: 0.18, name: 'Brummhildes Wiese' } },
+      uebung: { label: 'Übungsflug', klasse: 'blau', o: { dauer: 35, wespen: 0.7, powerups: 1.5, mut: 1.5, wind: false, uebung: true, name: 'Übungswiese' } },
+      scheitern: { label: 'Sofort scheitern (Mut 0.2)', klasse: 'grau', o: { dauer: 60, wespen: 1.6, powerups: 0.4, mut: 0.2, wind: true, name: 'Ferne Insel' } },
+    };
+    const params = new URLSearchParams(location.search);
+    window.ergebnisse = [];
+    window.pausen = pausen;
+    window.aufloesungen = 0;
+    window.starte = async (name, { auto = false, nichts = false, tempo = 1 } = {}) => {
+      const sz = SZ[name];
+      const p = openWespenalarm(fakeGame, { ...sz.o });
+      const dbg = window.__wespen;
+      dbg.tempo = tempo;
+      if (sz.alle) dbg.alle();
+      if (auto || nichts) { dbg.auto = auto; dbg.los(); }
+      markiere();
+      const r = await p;
+      window.aufloesungen++;
+      window.ergebnisse.push({ szenario: name, ...r });
+      document.getElementById('out').textContent = `${name}: ${JSON.stringify(r)}\nPausen offen: ${pausen.n} (max ${pausen.max})\nAufgelöst: ${window.aufloesungen}`;
+      return r;
+    };
+    const box = document.getElementById('szenarien');
+    for (const [k, sz] of Object.entries(SZ)) {
+      const b = document.createElement('button');
+      b.className = 'btn ' + sz.klasse; b.id = 'sz-' + k; b.textContent = sz.label;
+      b.onclick = () => window.starte(k);
+      box.append(b);
+    }
+    // Debug-Leiste
+    const PU = ['doppel', 'faecher', 'turbo', 'pollen', 'schild', 'bombe', 'riesen', 'seiten', 'hummel', 'mut', 'zeitlupe', 'magnet', 'stern'];
+    const knopf = (ziel, txt, fn) => { const b = document.createElement('button'); b.textContent = txt; b.onclick = e => { e.stopPropagation(); fn(b); }; ziel.append(b); return b; };
+    for (const k of PU) knopf(document.getElementById('dbg-pu'), k, () => window.__wespen?.gib(k));
+    const mehr = document.getElementById('dbg-mehr');
+    knopf(mehr, '🎉 alle', () => window.__wespen?.alle());
+    knopf(mehr, '👑 Boss', () => window.__wespen?.boss());
+    knopf(mehr, '⚠️ Alarm', () => window.__wespen?.alarm());
+    knopf(mehr, '🌸 Regen', () => window.__wespen?.regen());
+    knopf(mehr, '🐝 Formation', () => window.__wespen?.formation(['V', 'welle', 'kreis', 'linie'][Math.floor(Math.random() * 4)]));
+    knopf(mehr, '🟠 Brummer', () => window.__wespen?.wespe('brummer'));
+    knopf(mehr, '🍯 Bombe', () => window.__wespen?.bombe());
+    const autoK = knopf(mehr, '🤖 Autopilot', b => { if (window.__wespen) { window.__wespen.auto = !window.__wespen.auto; markiere(); } });
+    knopf(mehr, '⏩ Tempo ×3', b => { if (window.__wespen) { window.__wespen.tempo = window.__wespen.tempo > 1 ? 1 : 3; b.classList.toggle('an', window.__wespen.tempo > 1); } });
+    knopf(mehr, '⏭ 90 %', () => window.__wespen?.sprung(0.9));
+    knopf(mehr, '🏁 Sieg', () => window.__wespen?.sieg());
+    knopf(mehr, '💤 Mut 0', () => window.__wespen?.mut(0));
+    function markiere() { autoK.classList.toggle('an', !!window.__wespen?.auto); }
+
+    const sz = params.get('szenario');
+    if (sz && SZ[sz]) window.starte(sz, { auto: params.get('auto') === '1', nichts: params.get('nichts') === '1', tempo: Number(params.get('tempo') || 1) });
+  </script>
+</body>
+</html>

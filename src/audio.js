@@ -71,6 +71,29 @@ export const sfx = {
   },
   // sanftes Hinabgleiten
   sinken: () => { tone(620, 0, 1.1, { type: 'sine', vol: 0.12, slide: -330, attack: 0.05 }); noise(0, 0.9, 0.05, 900); },
+  // Wespenalarm: leises Nektar-„Plipp“ (wird oft gespielt → sehr leise)
+  nektar: () => tone(880 + Math.random() * 160, 0, 0.05, { type: 'sine', vol: 0.035, slide: 300 }),
+  // Wespe wird satt: fröhliches „Wuiii“ nach oben
+  satt: () => { tone(420, 0, 0.16, { type: 'triangle', vol: 0.12, slide: 380 }); tone(990, 0.08, 0.14, { type: 'sine', vol: 0.06 }); },
+  // Power-up: glitzerndes Arpeggio
+  powerup: () => [659, 784, 988, 1319, 1568].forEach((f, i) => tone(f, i * 0.05, 0.22, { type: 'triangle', vol: 0.12 })),
+  // Wespe brummt (kurz, freundlich-frech)
+  summ: () => { tone(150, 0, 0.35, { type: 'sawtooth', vol: 0.035, slide: 40 }); tone(156, 0.02, 0.33, { type: 'sawtooth', vol: 0.03, slide: -20 }); },
+  // sanftes „Boing“ beim Anrempeln
+  autsch: () => { tone(300, 0, 0.18, { type: 'sine', vol: 0.18, slide: -140 }); tone(240, 0.1, 0.16, { type: 'sine', vol: 0.12, slide: 120 }); },
+  // Honigblase fängt eine Wespe ab
+  schild: () => { tone(520, 0, 0.12, { type: 'sine', vol: 0.16, slide: 500 }); tone(1040, 0.06, 0.16, { type: 'sine', vol: 0.07 }); },
+  // Blüten-/Honigbombe: weiches „Wuuusch“ mit Glitzer
+  bombe: () => { noise(0, 0.6, 0.14, 1200); tone(220, 0, 0.5, { type: 'sine', vol: 0.18, slide: -120 }); [784, 988, 1175, 1568].forEach((f, i) => tone(f, 0.12 + i * 0.06, 0.25, { type: 'triangle', vol: 0.08 })); },
+  // Holo-HUD: weiches „Whoom" beim Hochfahren, Zusammenfallen beim Ausschalten, Piep beim Tab-Wechsel
+  holoAn: () => {
+    tone(70, 0, 1.1, { type: 'sine', vol: 0.22, slide: 260, attack: 0.25 });
+    tone(140, 0.05, 0.9, { type: 'triangle', vol: 0.06, slide: 520, attack: 0.3 });
+    noise(0, 0.9, 0.05, 1400);
+    [880, 1175, 1568, 2093].forEach((f, i) => tone(f, 0.45 + i * 0.07, 0.35, { type: 'sine', vol: 0.05 }));
+  },
+  holoAus: () => { tone(420, 0, 0.55, { type: 'sine', vol: 0.16, slide: -350, attack: 0.02 }); tone(1600, 0.42, 0.08, { type: 'square', vol: 0.03 }); noise(0, 0.45, 0.05, 900); },
+  holoTab: () => { tone(1046, 0, 0.07, { type: 'sine', vol: 0.1 }); tone(1568, 0.04, 0.09, { type: 'sine', vol: 0.07 }); },
 };
 
 // --- Sanfte, generative Musik (pentatonisch, Marimba-artig) ---

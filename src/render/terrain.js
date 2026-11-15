@@ -526,7 +526,7 @@ export class Terrain {
       }
       case 'steingarten': {
         for (let i = 0; i < 2200; i++) { const g = R(110, 200); o.fillStyle = `rgba(${g},${g * 0.97},${g * 0.92},.5)`; o.fillRect(R(0, W), R(0, HH), R(1, 3), R(1, 2.5)); }
-        for (let i = 0; i < 60; i++) platte(R(0, W), R(10, HH - 20), R(30, 96), R(8, 16), '#d6d0c4', '#958d80');
+        for (let i = 0; i < 46; i++) platte(R(0, W), R(10, HH - 20), R(40, 110), R(14, 24), '#b4ac9e', '#7a7266');
         break;
       }
       case 'felsen': {
@@ -639,7 +639,7 @@ export class Terrain {
     o.fillStyle = g; o.fillRect(0, 0, w, hh);
     const rnd = mulberry32(this.seed + 11);
     const R = (a, b) => a + rnd() * (b - a);
-    const ton = () => farbe(mischen(f1, f2, rnd()).map(v => v * R(0.75, 1.25)), 1);
+    const ton = () => { const k = R(0.75, 1.25), c = mischen(f1, f2, rnd()); return farbe(c.map(v => v * k), 1); };
     o.lineCap = 'round';
     if (art === 'nadeln') {
       for (let i = 0; i < 9000; i++) {
@@ -716,7 +716,7 @@ export class Terrain {
       for (let i = 0; i < 2400; i++) {
         const x = rnd() * w, y = rnd() * hh, r = R(3, 8);
         o.globalAlpha = R(0.6, 1);
-        const c = mischen(hell(f1, 0.15), f2, rnd());
+        const c = mischen(mischen(hell(f1, 0.15), f2, rnd()), [84, 150, 56], 0.35);
         const gg = o.createRadialGradient(x - r * 0.3, y - r * 0.3, 0.5, x, y, r);
         gg.addColorStop(0, farbe(hell(c, 0.3))); gg.addColorStop(1, farbe(c));
         o.fillStyle = gg; o.beginPath(); o.arc(x, y, r, 0, 7); o.fill();

@@ -80,6 +80,7 @@ try {
     app.append(cv);
     const r = new Renderer(cv);
     zeige(r, einzel, w, h);
+    window.galerie = { renderer: r, derive };
   } else {
     const kw = Number(q.get('kachel') ?? 480), kh = Math.round(kw * 0.62);
     const cv = document.createElement('canvas');

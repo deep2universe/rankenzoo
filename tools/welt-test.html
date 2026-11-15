@@ -4,8 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Welt-Testseite</title>
-  <!-- Entwicklerseite für die Welt-Ansicht (Renderer + Panel) ohne das ganze Spiel.
-       URL-Parameter: ?phase=0.85 (Tageszeit) &ok=1 (Flug bereit) &sel=bachufer &zoom=1.4 &regen=1 &kol=0 -->
+  <!-- Entwicklerseite für die Welt-Ansicht (Renderer + Panel) mit einem echten Spielstand, aber ohne das ganze Spiel.
+       URL-Parameter: ?phase=0.85 (Tageszeit) &ok=1 (Flug bereit) &sel=bachufer &zoom=1.4 &center=x,y &regen=1
+                      &kol=0 (keine Tochterkolonien) &tempo=4 (Simulation schneller) &aktiv=lichtung (aktive Kolonie) -->
   <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles/main.css">
   <link rel="stylesheet" href="../styles/strategie.css">
@@ -17,21 +18,63 @@
   <script type="module">
     import { WeltRenderer } from '../src/render/weltRenderer.js';
     import { WeltHUD } from '../src/ui/weltUI.js';
-    import { ORTE } from '../src/game/welt.js';
+    import { ALLE_ORTE } from '../src/game/welt.js';
+    import { newGame } from '../src/game/state.js';
+    import { hochzeitsflug } from '../src/game/actions.js';
+    import { derive } from '../src/game/sim.js';
+    import { kolonienTick, wechsleKolonie, aktiveId } from '../src/game/kolonien.js';
+    import { baueRoute, routeAusbauen, weltTick } from '../src/game/zivilisation.js';
 
     const P = new URLSearchParams(location.search);
     const canvas = document.getElementById('welt');
-    const state = {
-      zeit: 1000, spieler: { koloniename: 'Krümelhausen' },
-      welt: { kolonien: P.get('kol') === '0' ? [] : [{ ort: 'bachufer', name: 'Neu-Krümelhausen', tag: 1 }], fluege: 1, versuche: 1, gewaehlt: null },
-    };
-    if (P.get('kol') === '3') state.welt.kolonien.push({ ort: 'lichtung', name: 'Klein-Krümelhausen', tag: 4 }, { ort: 'blumentopf', name: 'Ober-Krümelhausen', tag: 5 });
+
+    // ---------- realistischer Spielstand aus den echten Spielmodulen ----------
+    const state = newGame('Testkönigin', 'Krümelhausen');
+    Object.assign(state.res, { sterne: 99999, material: 99999, fp: 99999 });
+    state.volk.drohnen = 200;
+    const orte = P.get('kol') === '0' ? [] : ['lichtung', 'blumenwiese', 'bachufer', 'waldrand', 'obstwiese', 'teich'];
+    for (const o of orte) hochzeitsflug(state, o);
+    // Gästehäuser, damit Besuche reisen können (nur als Kammer-Eintrag, für hotelVon)
+    const hotel = (rooms, stufe = 1) => rooms.push({ id: 900 + rooms.length, typ: ['gaestehaus', 'hotel', 'grandhotel'][stufe - 1], x: 0, y: 0, w: 4, h: 2, bau: 1, verbunden: true });
+    hotel(state.rooms, 2);
+    for (const [i, id] of orte.entries()) if (i % 2 === 0) hotel(state.kolonienDaten[id].rooms);
+    let d = derive(state);
+    const sim = s => { for (let i = 0; i < s; i++) { try { kolonienTick(state, 1); } catch (e) { console.warn('kolonienTick', e); } d = derive(state); weltTick(state, 1, d); } };
+    sim(2);
+    if (orte.length) {
+      for (const [a, b] of [['heim', 'lichtung'], ['heim', 'blumenwiese'], ['heim', 'bachufer'], ['lichtung', 'waldrand'], ['heim', 'teich']]) baueRoute(state, 'strasse', a, b);
+      for (const [a, b] of [['heim', 'obstwiese'], ['blumenwiese', 'obstwiese'], ['bachufer', 'teich']]) baueRoute(state, 'boten', a, b);
+      sim(80);
+      const str = (a, b) => state.welt.strassen.find(r => (r.a === a && r.b === b) || (r.a === b && r.b === a));
+      routeAusbauen(state, str('heim', 'lichtung')); routeAusbauen(state, str('heim', 'blumenwiese'));
+      sim(40);
+      routeAusbauen(state, str('heim', 'lichtung'));
+      sim(40);
+      baueRoute(state, 'strasse', 'waldrand', 'teich');
+      baueRoute(state, 'boten', 'lichtung', 'obstwiese');
+      sim(14);
+      // Ungleiche Vorräte → Waren fließen
+      state.kolonienDaten.lichtung.nahrung = 4; state.kolonienDaten.teich.nahrung = 6;
+      Object.assign(state.res, { sterne: 58, material: 34, fp: 12 }); // damit manche Knöpfe „zu teuer" zeigen
+      // ein paar Gäste gleich unterwegs (wie weltTick sie anlegt)
+      const W = state.welt, arten = ['studenten', 'nahrung', 'konferenz', 'freunde'];
+      W.strassen.filter(r => r.bau >= 1).slice(0, 4).forEach((r, i) => W.besuche.push({ id: (W.nextBesuch = (W.nextBesuch ?? 1) + 1), route: r.id, von: i % 2 ? r.a : r.b, nach: i % 2 ? r.b : r.a, art: arten[i], p: 0.15 + i * 0.12, dauer: 40 }));
+    }
+    if (P.get('aktiv') && P.get('aktiv') !== 'heim') wechsleKolonie(state, P.get('aktiv'));
+    d = derive(state);
+
+    // ---------- Fake-Spiel mit der API aus main.js ----------
     const bereit = P.get('ok') === '1';
     const R = new WeltRenderer(canvas);
+    let hud;
     const game = {
-      state, weltR: R,
-      hochzeitsflugStatus: () => bereit ? { ok: true, gruende: [] } : { ok: false, gruende: ['Baue einen Hochzeitsflug-Startplatz am Hügelrand', 'Mindestens 8 Drohnen (du hast 3)', 'Zufriedenheit mind. 60 % (jetzt 52 %)'] },
-      starteHochzeitsflug: id => { console.log('starteHochzeitsflug', id); window.gestartet = id; },
+      state, weltR: R, get d() { return d; },
+      hochzeitsflugStatus: () => bereit ? { ok: true, gruende: [], drohnen: 3 } : { ok: false, drohnen: 4, gruende: ['Baue einen Hochzeitsflug-Startplatz 🪽 am Hügelrand (der Bauplan ist schon da!)', 'Mindestens 4 Drohnen 🪽 (du hast 1)', 'Zufriedenheit mind. 50 % (jetzt 42 %)'] },
+      starteHochzeitsflug: (id, modus) => { console.log('starteHochzeitsflug', id, modus); window.gestartet = [id, modus]; },
+      uebungsflug: modus => { console.log('uebungsflug', modus); window.geuebt = modus; },
+      besucheKolonie: id => { console.log('besucheKolonie', id); if (id !== aktiveId(state)) wechsleKolonie(state, id); d = derive(state); R.listeT = -1; hud.refresh(true); window.besucht = id; },
+      baueRoute: (art, a, b) => { const r = baueRoute(state, art, a, b); console.log('baueRoute', art, a, b, r.ok ? 'ok' : r.grund); hud.refresh(true); return r; },
+      routeAusbauen: id => { const rt = state.welt.strassen.find(x => x.id === id); const r = rt ? routeAusbauen(state, rt) : { ok: false }; console.log('routeAusbauen', id, r); hud.refresh(true); return r; },
     };
     const resize = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, R.maxDpr);
@@ -40,16 +83,18 @@
     };
     resize();
     addEventListener('resize', resize);
+    const tb = performance.now();
     R.setState(state);
+    window.baseMs = performance.now() - tb;
     R.flugBereit = bereit;
     const links = document.querySelector('.links');
-    const hud = new WeltHUD(game, document.getElementById('hud'));
+    hud = new WeltHUD(game, document.getElementById('hud'));
     links.append(hud.panel);
     if (P.get('zoom')) R.zoomAt(innerWidth / 2, innerHeight / 2, +P.get('zoom'));
-    if (P.get('sel')) hud.zeige(ORTE.find(x => x.id === P.get('sel')));
+    if (P.get('sel')) hud.zeige(ALLE_ORTE.find(x => x.id === P.get('sel')));
     if (P.get('center')) { const [x, y] = P.get('center').split(',').map(Number); R.centerOn(x, y); }
     hud.refresh(true);
-    Object.assign(window, { R, hud, game });
+    Object.assign(window, { R, hud, game, state });
 
     // Steuerung: Ziehen = verschieben, Rad = zoomen, Klick = Ort wählen
     let drag = null;
@@ -70,12 +115,14 @@
     canvas.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = pos(e); R.zoomAt(x, y, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
     addEventListener('keydown', e => { if (e.key === 'Escape') { R.selected = null; hud.waehle(null); } });
 
-    let last = performance.now(), frames = 0, ms = 0;
-    const phase = P.has('phase') ? +P.get('phase') : 0.3, regen = P.get('regen') === '1';
+    let last = performance.now(), frames = 0, ms = 0, acc = 0;
+    const phase = P.has('phase') ? +P.get('phase') : 0.3, regen = P.get('regen') === '1', tempo = +(P.get('tempo') ?? 1);
     function loop(now) {
       const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      acc += dt * tempo;
+      while (acc >= 1) { acc -= 1; sim(1); }
       const t0 = performance.now();
-      R.frame(dt, { tagPhase: phase, regen });
+      R.frame(dt, { ...d, tagPhase: phase, regen });
       ms += performance.now() - t0; frames++;
       if (frames % 30 === 0) hud.refresh();
       window.frameMs = ms / frames;

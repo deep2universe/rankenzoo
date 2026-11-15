@@ -5,7 +5,7 @@
 <title>Kammer-Galerie</title>
 <!-- Entwickler-Werkzeug: zeigt alle Kammer-Typen (Entwicklungslinien) nebeneinander.
      Start: node tools/serve.mjs 8090  →  http://localhost:8090/tools/raeume-galerie.html
-     Optional: ?t=2.5 (Animationszeit), ?zoom=2 -->
+     Optional: ?t=2.5 (Animationszeit), ?zoom=2, ?linie=gaestehaus (nur eine Linie), &groessen=1 (alle Raumgrößen) -->
 <style>
   body { margin: 0; background: #1b120a; color: #f3e3c8; font: 12px Fredoka, Nunito, sans-serif; }
   canvas { display: block; }
@@ -26,6 +26,12 @@ for (const [key, L] of Object.entries(LINIEN)) {
   if (nurLinie && key !== nurLinie) continue;
   if (L.stufen.every(k => GEBAEUDE[k].zone === 'revier')) continue;
   zeilen.push({ titel: key, eintraege: L.stufen.map(k => ({ typ: k, w: GEBAEUDE[k].w * T, h: GEBAEUDE[k].h * T })) });
+}
+// ?linie=…&groessen=1: die gewählte Linie zusätzlich in allen Raumgrößen (96×64 … 160×96)
+if (nurLinie && q.get('groessen') && LINIEN[nurLinie]) {
+  for (const [w, h] of [[96, 64], [128, 64], [160, 64], [128, 96], [160, 96]]) {
+    zeilen.push({ titel: `${nurLinie} ${w}×${h}`, eintraege: LINIEN[nurLinie].stufen.map(k => ({ typ: k, w, h })) });
+  }
 }
 // Bildungslinie in alten Maßen
 for (const [w, h] of [[96, 64], [128, 64], [160, 96]]) {
