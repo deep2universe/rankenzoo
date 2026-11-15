@@ -43,7 +43,7 @@ const TSCHUESS = ['Tschüss!', 'Wir lassen dich in Ruhe!', 'Oh, entschuldige!', 
 const PU = {
   doppel: { name: 'Doppel-Nektar', icon: '💧', rgb: '255,190,60', blatt: ['#ffe066', '#ffae1a'], art: 'stufe', max: 3, info: 'Mehr Nektarstrahlen!' },
   faecher: { name: 'Fächerschuss', icon: '🌼', rgb: '255,140,190', blatt: ['#ffb3d1', '#ff6fa5'], art: 'stufe', max: 3, info: 'Tropfen fliegen im Fächer!' },
-  turbo: { name: 'Turbo-Tropfen', icon: '⚡', rgb: '255,240,90', blatt: ['#fff59a', '#ffd000'], art: 'zeit', dauer: 10, info: 'Doppelt so schnell spritzen!' },
+  turbo: { name: 'Turbo-Tropfen', icon: '⚡', rgb: '255,240,90', blatt: ['#fff59a', '#ffd000'], art: 'zeit', dauer: 10, info: 'Viel schneller spritzen!' },
   pollen: { name: 'Pollen-Sucher', icon: '🌻', rgb: '255,215,60', blatt: ['#ffd84d', '#e89b00'], art: 'stufe', max: 3, info: 'Pollenkugeln finden Wespen von allein!' },
   schild: { name: 'Honig-Schild', icon: '🛡️', rgb: '255,200,90', blatt: ['#ffe2a0', '#f0a830'], art: 'ladung', max: 3, info: 'Eine Honigblase schützt dich!' },
   bombe: { name: 'Blüten-Bombe', icon: '💥', rgb: '255,110,150', blatt: ['#ff8fb8', '#ff3f7f'], art: 'sofort', info: 'Alle Wespen werden auf einmal satt!' },
@@ -939,7 +939,14 @@ export function openWespenalarm(game, opts = {}) {
         teil({ k: 'klecks', x, y, vx: Math.cos(a) * v + 8, vy: Math.sin(a) * v - 8, l: 0, max: rand(0.35, 0.6), g: rand(0.45, 0.9), c: pick(c) });
       }
     }
-    function flash(e, kl) { e.classList.remove(kl); void e.offsetWidth; e.classList.add(kl); }
+    const flashZeit = new WeakMap();
+    function flash(e, kl) {
+      // höchstens alle 0,3 s neu anstoßen (vermeidet viele Reflows bei Wespen-Schwärmen)
+      const jetzt = performance.now();
+      if (jetzt - (flashZeit.get(e) ?? -1e9) < 300) return;
+      flashZeit.set(e, jetzt);
+      e.classList.remove(kl); void e.offsetWidth; e.classList.add(kl);
+    }
 
     // ---------- Wespen ----------
     function neueWespe(typ, x, y, extra = {}) {
@@ -1286,7 +1293,7 @@ export function openWespenalarm(game, opts = {}) {
       if (S.tonT <= 0) { ton('nektar'); S.tonT = 0.13; }
     }
     function feuern(dt) {
-      const rate = 5.2 * (S.zeit.turbo > 0 ? 2 : 1) * (S.zeit.stern > 0 ? 1.3 : 1);
+      const rate = 5.2 * (S.zeit.turbo > 0 ? 1.7 : 1) * (S.zeit.stern > 0 ? 1.3 : 1);
       S.schussT -= dt;
       let n = 0;
       while (S.schussT <= 0 && n++ < 4) { S.schussT += 1 / rate; salve(); }
@@ -2100,7 +2107,7 @@ export function openWespenalarm(game, opts = {}) {
         const x = p.x * U, y = p.y * U;
         switch (p.k) {
           case 'funke':
-            drawGlow(ctx, '255,226,120', x, y, p.g * 3.2 * U, a);
+            if (S.teile.length < 350) drawGlow(ctx, '255,226,120', x, y, p.g * 3.2 * U, a);
             ctx.fillStyle = `rgba(255,255,240,${a})`; ctx.beginPath(); ctx.arc(x, y, p.g * 0.45 * U, 0, TAU); ctx.fill();
             break;
           case 'stern': {
