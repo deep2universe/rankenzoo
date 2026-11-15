@@ -198,7 +198,7 @@ export const GEBAEUDE = {
     fakt: 'Ameisen gibt es seit über 100 Millionen Jahren – sie lebten schon zur Zeit der Dinosaurier.',
   },
   hochzeit: {
-    name: 'Hochzeitsflug-Startplatz', icon: '🪽', w: 3, h: 2, zone: 'huegel', amRand: true, stufe: 3, kosten: 70, bauzeit: 24,
+    name: 'Hochzeitsflug-Startplatz', icon: '🪽', w: 3, h: 2, zone: 'huegel', amRand: true, stufe: 0, kosten: 35, bauzeit: 16,
     personal: 1, beruf: { name: 'Fluglotsin', acc: 'stirnband' }, liefert: { freizeit: 10 }, farbe: '#d6f3ff',
     einzigartig: true,
     text: 'Von hier starten Drohnen und junge Königinnen zum Hochzeitsflug. Muss am Hügelrand liegen.',
@@ -305,6 +305,13 @@ export const GEBAEUDE = {
     effekte: { zufriedenBonus: 4, revierBonus: 0.15, expSlots: 1 }, farbe: '#f3e1b0',
     text: 'Gute Planung: +4 % Zufriedenheit, Revier-Trupps +15 % und eine Expedition mehr.',
     fakt: 'Ameisen haben keinen Chef – nicht einmal die Königin gibt Befehle! Jede Ameise reagiert auf Düfte und auf die Ameisen, denen sie begegnet.',
+  },
+  gaestehaus: {
+    name: 'Duft-Gästehaus', icon: '🛎️', w: 4, h: 2, zone: 'erde', minTiefe: 2, stufe: 1, kosten: 40, material: 15, bauzeit: 18,
+    personal: 2, beruf: { name: 'Gastgeberin', acc: 'schleife' }, liefert: { freizeit: 15 },
+    effekte: { hotel: 1 }, farbe: '#ffd8b0',
+    text: 'Gästezimmer für Besuch aus anderen Kolonien: Studentenaustausch, Nahrungstausch und Duftspur-Treffen werden möglich.',
+    fakt: 'Ameisen erkennen am Duft, wer zum eigenen Volk gehört. Fremde Ameisen werden erst „beschnuppert", bevor sie herein dürfen.',
   },
   bahnhof: {
     name: 'Duftspur-Bahnhof', icon: '🚂', w: 4, h: 2, zone: 'oberflaeche', stufe: 2, kosten: 55, material: 30, bauzeit: 22, forschung: 'duftspuren',
@@ -664,6 +671,16 @@ const AUSBAU = {
       text: 'Die Stimme jeder Ameise zählt: +7 % Zufriedenheit und starke Trupps.',
       fakt: 'Bei der Nestwahl schicken Ameisen Kundschafterinnen los. Ist ein Ort gut, holen sie andere im „Tandemlauf" nach.' },
   ],
+  gaestehaus: [
+    { key: 'hotel', name: 'Ameisen-Hotel', icon: '🏨', stufe: 2, kosten: 75, material: 30, bauzeit: 26, personal: 3,
+      liefert: { freizeit: 25 }, effekte: { hotel: 2, zufriedenBonus: 1 }, farbe: '#ffe2c0',
+      text: 'Ein richtiges Hotel mit Rezeption: doppelt so viele Gäste aus anderen Kolonien.',
+      fakt: 'Manche Ameisenvölker sind miteinander befreundet: Ihre Ameisen dürfen sich gegenseitig besuchen, ohne dass es Streit gibt.' },
+    { key: 'grandhotel', name: 'Grandhotel „Sternenduft"', icon: '🏙️', stufe: 3, kosten: 120, material: 50, bauzeit: 34, personal: 4,
+      liefert: { freizeit: 40 }, effekte: { hotel: 3, zufriedenBonus: 2, fp: 1 }, farbe: '#fff0d8',
+      text: 'Luxus mit Kronleuchter und Konferenzsaal: viele Gäste, Duftspur-Kongresse und Wissensaustausch.',
+      fakt: 'Superkolonien bestehen aus vielen Nestern, deren Ameisen sich frei besuchen – manche erstrecken sich über Tausende Kilometer.' },
+  ],
   bahnhof: [
     { key: 'hauptbahnhof', name: 'Hauptbahnhof', icon: '🚉', stufe: 3, kosten: 80, material: 35, bauzeit: 26, personal: 3,
       liefert: { freizeit: 15 }, effekte: { revierBonus: 0.35 }, farbe: '#ffd8aa',
@@ -697,7 +714,7 @@ export const LINIEN_FACH = {
   deutsch: ['wohnen', 'kita', 'buchhandlung', 'rathaus', 'wache', 'theater'],
   mathe: ['brut', 'vorrat', 'tankstelle', 'einkauf', 'labor', 'bank', 'bahnhof'],
   sachunterricht: ['koenigin', 'muell', 'pilz', 'blattlaus', 'brunnen', 'sonne', 'spaeher', 'zelt', 'hochzeit'],
-  englisch: ['baeckerei', 'restaurant', 'eisladen', 'schuhladen', 'handel', 'schwimmbad'],
+  englisch: ['baeckerei', 'restaurant', 'eisladen', 'schuhladen', 'handel', 'schwimmbad', 'gaestehaus'],
   musik_kunst: ['kino', 'moebel', 'friseur', 'musikschule'],
   sport_werte: ['apotheke', 'fussball', 'sporthalle', 'spielplatz'],
 };
@@ -746,7 +763,7 @@ export const LINIEN = {};
 })();
 
 /** Startbaupläne (sind von Anfang an freigeschaltet). */
-export const START_PLAENE = ['koenigin', 'brut', 'wohnen', 'vorrat'];
+export const START_PLAENE = ['koenigin', 'brut', 'wohnen', 'vorrat', 'hochzeit'];
 
 // Accessoires und Farben für die Statistik
 export const ROHSTOFFE = {

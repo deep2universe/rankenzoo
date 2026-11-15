@@ -5,6 +5,8 @@ import { forschungsEffekte, forschungTick } from './forschung.js';
 import { revierBedarf, revierRaten, revierTick, lagerEffekte } from './revier.js';
 import { weltEffekte, startplatzStufe, drohnenNoetig } from './welt.js';
 import { ausbauFertig } from './bauplaene.js';
+import { gruendungsBonus, drohnenGesamt } from './kolonien.js';
+import { netzEffekte } from './zivilisation.js';
 import { emit } from '../events.js';
 import { clamp } from '../util.js';
 
@@ -17,12 +19,16 @@ export function derive(state) {
     verbrauch: 0, sterneProMin: 0, zufriedenBonus: 0, joker: 0,
     fp: 0, fpMult: 0, forschTempo: 0, wacheStaerke: 0, sicht: 0, expSlots: 0, expTempo: 0, revierBonus: 0, handel: 0,
     lagerBonus: 0, weideBonus: 0, eiTempo: 0, bauTempo: 0, hygieneMult: 0, waermeMult: 0, freizeitMult: 0,
-    quelleNahrung: 0, quelleNachwuchs: 0, schatzBonus: 0, flugBonus: 0, ausbauRabatt: 0, pollen: 0,
+    quelleNahrung: 0, quelleNachwuchs: 0, schatzBonus: 0, flugBonus: 0, ausbauRabatt: 0, pollen: 0, hotel: 0,
   };
   // Forschung und Tochterkolonien wirken immer (unabhängig vom Personal)
   for (const [k, val] of Object.entries(forschungsEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
   for (const [k, val] of Object.entries(weltEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
   if (state.revier) for (const [k, val] of Object.entries(lagerEffekte(state.revier))) fx[k] = (fx[k] ?? 0) + val;
+  for (const [k, val] of Object.entries(netzEffekte(state))) fx[k] = (fx[k] ?? 0) + val;
+  // Junge Tochterkolonien wachsen in den ersten Tagen besonders schnell
+  const gb = gruendungsBonus(state);
+  fx.eiTempo += 0.9 * gb; fx.brutTempo += 0.5 * gb; fx.bauTempo += 0.5 * gb;
   const fertig = state.rooms.filter(r => r.bau >= 1 && r.verbunden !== false);
   // Spezial-Effekte, die andere Effizienzen beeinflussen, zuerst grob sammeln (Universität, Berufsschule)
   for (const r of fertig) fx.ausbildung += GEBAEUDE[r.typ].effekte?.ausbildung ?? 0;
@@ -82,7 +88,7 @@ export function derive(state) {
     if (ef.lager) lager += ef.lager * Math.max(0.5, Math.min(e, 1));
     if (ef.brutPlatz) brutPlatz += ef.brutPlatz;
     for (const key of ['brutTempo', 'sammelBonus', 'tempo', 'quizBonus', 'wohnBonus', 'pilzBonus', 'verbrauch', 'sterneProMin', 'zufriedenBonus', 'joker',
-      'fp', 'forschTempo', 'wacheStaerke', 'sicht', 'expSlots', 'expTempo', 'revierBonus', 'handel', 'lagerBonus', 'eiTempo', 'bauTempo', 'weideBonus']) {
+      'fp', 'forschTempo', 'wacheStaerke', 'sicht', 'expSlots', 'expTempo', 'revierBonus', 'handel', 'lagerBonus', 'eiTempo', 'bauTempo', 'weideBonus', 'hotel']) {
       if (ef[key]) fx[key] += ef[key] * Math.min(e, 1.1);
     }
     if (ef.flugBonus) fx.flugBonus = Math.max(fx.flugBonus, ef.flugBonus); // Startplatz-Stufe zählt, nicht die Besetzung
@@ -243,10 +249,10 @@ export function refreshConnectivity(state) {
 export function hochzeitsflugBereit(state, d) {
   const stufe = startplatzStufe(state);
   const drohnen = drohnenNoetig(state);
+  const hat = drohnenGesamt(state);
   const gruende = [];
-  if (!stufe) gruende.push('Baue einen Hochzeitsflug-Startplatz am Hügelrand');
-  if (state.volk.drohnen < drohnen) gruende.push(`Mindestens ${drohnen} Drohnen (du hast ${state.volk.drohnen})`);
-  if (state.volk.arbeiterinnen < 40) gruende.push(`Mindestens 40 Arbeiterinnen (du hast ${state.volk.arbeiterinnen})`);
-  if (d.zufriedenheit < 60) gruende.push(`Zufriedenheit mind. 60 % (jetzt ${Math.round(d.zufriedenheit)} %)`);
+  if (!stufe) gruende.push('Baue einen Hochzeitsflug-Startplatz 🪽 am Hügelrand (der Bauplan ist schon da!)');
+  if (hat < drohnen) gruende.push(`Mindestens ${drohnen} Drohnen 🪽 (du hast ${hat}) – stelle im Volk-Fenster den Drohnen-Anteil höher`);
+  if (d.zufriedenheit < 50) gruende.push(`Zufriedenheit mind. 50 % (jetzt ${Math.round(d.zufriedenheit)} %)`);
   return { ok: gruende.length === 0, gruende, drohnen };
 }

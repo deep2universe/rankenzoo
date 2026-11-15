@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node tools/serve.mjs 8080",
     "validate": "node tools/validate-questions.mjs",
-    "test": "node tools/validate-questions.mjs && node tools/smoke-test.mjs && node tools/strategie-test.mjs && node tools/schule-test.mjs"
+    "test": "node tools/validate-questions.mjs && node tools/smoke-test.mjs && node tools/strategie-test.mjs && node tools/schule-test.mjs && node tools/zivilisation-test.mjs"
   },
   "license": "UNLICENSED"
 }

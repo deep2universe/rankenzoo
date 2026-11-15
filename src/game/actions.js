@@ -7,6 +7,7 @@ import { C } from './config.js';
 import { emit } from '../events.js';
 import { istFrei, baukosten, neuBaubar, offenePlaene, schalteFrei, zufallsPlan } from './bauplaene.js';
 import { gruendeKolonie, ortById, drohnenNoetig } from './welt.js';
+import { neueKolonieDaten, nimmDrohnen, berechneInfo } from './kolonien.js';
 
 export function digCell(state, x, y, extra) {
   if (state.res.gang <= 0) return { ok: false, grund: 'Keine Gangstücke mehr! Verdiene neue im Quiz.' };
@@ -93,13 +94,19 @@ export function upgradeHill(state, pop) {
 export function hochzeitsflug(state, ortId) {
   const k = state.kronenStufe;
   const ort = ortById(ortId);
-  state.volk.drohnen = Math.max(0, state.volk.drohnen - drohnenNoetig(state));
+  nimmDrohnen(state, drohnenNoetig(state));
   state.kronenStufe++;
   state.kolonienGegruendet++;
   state.stats.hochzeitsfluege++;
   const sterne = 150 + 60 * k;
   state.res.sterne += sterne;
-  const kolonie = ort ? gruendeKolonie(state, ortId) : null;
+  const kolonie = ort && ortId !== 'heim' ? gruendeKolonie(state, ortId) : null;
+  if (kolonie) {
+    // Die neue Kolonie ist sofort bebaubar: eigenes Gelände der Gegend, Startnest und mitgeflogene Arbeiterinnen
+    state.kolonienDaten ??= {};
+    state.kolonienDaten[ortId] = neueKolonieDaten(state, ortId);
+    berechneInfo(state, ortId);
+  }
   if (state.welt) state.welt.fluege = (state.welt.fluege ?? 0) + 1;
   const plan = zufallsPlan(state, 'hochzeitsflug');
   emit('hochzeitsflug', { sterne, plan, stufe: state.kronenStufe, kolonie, ort });

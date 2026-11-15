@@ -29,17 +29,25 @@ export function startScreen(onNeu, onWeiter) {
   const name = h('input', { value: 'Lena', maxlength: 16, placeholder: 'Dein Name', autocomplete: 'off' });
   const kol = h('input', { value: 'Krümelhausen', maxlength: 20, placeholder: 'Name deines Ameisenstaates', autocomplete: 'off' });
   name.value = ''; name.placeholder = 'z. B. Lena';
+  let lernmodus = 'stundenplan';
+  const modusKarte = (k, icon, titel, text) => h('button.lernmodus-karte' + (lernmodus === k ? '.an' : ''), { 'data-modus': k, type: 'button', onclick: e => {
+    lernmodus = k;
+    e.currentTarget.parentElement.querySelectorAll('.lernmodus-karte').forEach(b => b.classList.toggle('an', b.dataset.modus === k));
+  } }, h('span.em', icon), h('b', titel), h('small', text));
+  const modusWahl = h('div.lernmodus-wahl',
+    modusKarte('stundenplan', '📅', 'Mit Stundenplan', 'Wie in der Schule: Das Fach kommt nach Plan, du wählst das Thema.'),
+    modusKarte('frei', '🎈', 'Freie Wahl', 'Du suchst dir Fach, Thema und Test-Paket selbst aus.'));
   const neu = async () => {
     if (info && !(await confirmDialog('Neues Spiel?', 'Dein bisheriger Ameisenstaat wird dabei gelöscht. Wirklich neu anfangen?', 'Ja, neu starten'))) return;
     resetSave();
     fill(root);
-    onNeu(name.value.trim() || 'Königin', kol.value.trim() || 'Krümelhausen');
+    onNeu(name.value.trim() || 'Königin', kol.value.trim() || 'Krümelhausen', lernmodus);
   };
   fill(root, h('div.start-bg'), h('div.start-karte',
     logo,
     h('div.logo', 'Ameisenreich'),
     h('div.untertitel', 'Baue deinen Ameisenstaat – mit Wissen, Köpfchen und Fleiß!'),
-    info ? h('div.spielstand', `👑 Gespeichert: „${info.kolonie}" von ${info.name} · ${fmt(info.pop)} Ameisen`) : null,
+    info ? h('div.spielstand', `👑 Gespeichert: „${info.kolonie}" von ${info.name} · ${fmt(info.pop)} Ameisen${info.kolonien > 1 ? ` · ${info.kolonien} Kolonien` : ''}`) : null,
     h('div.start-knoepfe',
       info ? h('button.btn.gruen.gross', { onclick: () => { fill(root); onWeiter(); } }, '▶ Weiterspielen') : null,
       h('details', { open: !info },
@@ -47,12 +55,13 @@ export function startScreen(onNeu, onWeiter) {
         h('div.start-form',
           h('label', 'Wie heißt du, Königin?'), name,
           h('label', 'Wie soll dein Ameisenstaat heißen?'), kol,
+          h('label', 'Wie möchtest du lernen?'), modusWahl,
           h('button.btn.gross', { onclick: neu, style: { marginTop: '6px' } }, '👑 Ameisenstaat gründen'),
         ),
       ),
     ),
     h('div.fusszeile', '📚 Lernstoff Klasse 4 nach dem Bildungsplan Baden-Württemberg · Deutsch, Mathe, Sachunterricht, Englisch, Musik & Kunst, Sport & Miteinander',
-      h('br'), '⇧ Shift wechselt zwischen Nest (graben & bauen) und Revier (Ameisen Befehle geben).', h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
+      h('br'), '⇧ Shift wechselt zwischen Nest (graben & bauen), Revier (Befehle geben) und Welt (neue Kolonien gründen).', h('br'), '💾 Dein Spiel wird automatisch in diesem Browser gespeichert.'),
   ));
   anim();
 }
@@ -158,6 +167,11 @@ export function einstellungen(game) {
       schalter('musik', '🎵 Musik'),
       schalter('vorlesen', '🔊 Vorlesen erlauben', canSpeak() ? 'Fragen können vorgelesen werden (🔊-Knopf).' : 'Dein Browser unterstützt kein Vorlesen.'),
       h('div.einst-zeile', h('div', '⏱️ Spieltempo'), tempo),
+      h('div.einst-zeile', h('div', '📚 Lernen', h('div', { style: { fontSize: '.8rem', color: '#8a6a4a' } }, 'Mit Stundenplan (Fach nach Plan) oder freie Wahl von Fach, Thema und Test-Paket. Gewonnene Baupläne bleiben immer erhalten.')),
+        h('div.seg', [['stundenplan', '📅 Stundenplan'], ['frei', '🎈 Frei']].map(([k, n]) => h('button' + ((e.lernmodus ?? 'stundenplan') === k ? '.an' : ''), { onclick: ev => {
+          e.lernmodus = k; game.save();
+          ev.target.parentElement.querySelectorAll('button').forEach(b => b.classList.toggle('an', b === ev.target));
+        } }, n)))),
       h('div.einst-zeile', h('div', '🖥️ Grafik', h('div', { style: { fontSize: '.8rem', color: '#8a6a4a' } }, '„Sparsam" schont Akku und Lüfter (weniger Bilder pro Sekunde, geringere Auflösung).')),
         h('div.seg', [['sparsam', 'Sparsam 🍃'], ['ausgewogen', 'Ausgewogen'], ['hoch', 'Hoch ✨']].map(([k, n]) => h('button' + ((e.grafik ?? 'ausgewogen') === k ? '.an' : ''), { onclick: ev => {
           e.grafik = k; game.wendeGrafikAn?.(k); game.save();

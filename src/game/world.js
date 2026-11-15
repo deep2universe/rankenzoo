@@ -1,22 +1,24 @@
 // Weltgitter: Erde, Gänge, Kammern, Hügel – Platzierungsregeln & Wegfindung.
 import { COLS, ROWS, GROUND, DEPTH, HILL_X, WATER_ROWS, C, GEBAEUDE, hillShape } from './config.js';
 import { mulberry32 } from '../util.js';
+import { biom as biomDaten } from './biome.js';
 
 export const idx = (x, y) => y * COLS + x;
 /** Größe eines Raums in Zellen. Räume merken sich ihre Maße (alte Spielstände & Ausbau behalten die Fläche). */
 export const raumMasse = r => { const G = GEBAEUDE[r.typ]; return { w: r.w ?? G.w, h: r.h ?? G.h }; };
 export const inBounds = (x, y) => x >= 0 && y >= 0 && x < COLS && y < ROWS;
 
-export function createWorld(seed = 7) {
+export function createWorld(seed = 7, biom = 'heim') {
   const typ = new Uint8Array(COLS * ROWS);
   const rnd = mulberry32(seed);
+  const B = biomDaten(biom);
   for (let y = 0; y < ROWS; y++) {
     for (let x = 0; x < COLS; x++) {
       typ[idx(x, y)] = y < GROUND ? C.AIR : y >= ROWS - WATER_ROWS ? C.WATER : C.EARTH;
     }
   }
   // Felsbrocken (unbebaubar) – nicht im Startbereich
-  const blobs = 26;
+  const blobs = Math.round(26 * (B.fels ?? 1));
   for (let i = 0; i < blobs; i++) {
     const bx = Math.floor(rnd() * COLS);
     const by = GROUND + 5 + Math.floor(rnd() * (DEPTH - 8));
@@ -31,11 +33,11 @@ export function createWorld(seed = 7) {
     }
   }
   // Wasseradern: ein paar Wasserzellen über dem Grundwasser
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < Math.round(5 * (B.wasser ?? 1)); i++) {
     const bx = Math.floor(rnd() * COLS);
     for (let x = bx; x < bx + 3 + rnd() * 4 && x < COLS; x++) typ[idx(x, ROWS - WATER_ROWS - 1)] = C.WATER;
   }
-  const world = { typ, raum: new Int16Array(COLS * ROWS).fill(-1), hill: 0, seed, version: 0 };
+  const world = { typ, raum: new Int16Array(COLS * ROWS).fill(-1), hill: 0, seed, version: 0, biom };
   setHill(world, 1);
   return world;
 }
@@ -284,12 +286,12 @@ export function rebuildRoomIndex(world, rooms) {
 export function serializeWorld(world) {
   let s = '';
   for (let i = 0; i < world.typ.length; i++) s += world.typ[i].toString(36);
-  return { typ: s, hill: world.hill, seed: world.seed };
+  return { typ: s, hill: world.hill, seed: world.seed, biom: world.biom ?? 'heim' };
 }
 export function deserializeWorld(data, rooms) {
   const typ = new Uint8Array(COLS * ROWS);
   for (let i = 0; i < typ.length; i++) typ[i] = parseInt(data.typ[i] ?? '1', 36);
-  const world = { typ, raum: new Int16Array(COLS * ROWS).fill(-1), hill: data.hill, seed: data.seed, version: 1 };
+  const world = { typ, raum: new Int16Array(COLS * ROWS).fill(-1), hill: data.hill, seed: data.seed, version: 1, biom: data.biom ?? 'heim' };
   rebuildRoomIndex(world, rooms);
   return world;
 }

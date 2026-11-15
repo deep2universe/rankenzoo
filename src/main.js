@@ -8,7 +8,9 @@ import { WeltRenderer } from './render/weltRenderer.js';
 import { openHochzeitsflug } from './ui/hochzeitsflug.js';
 import { openBauplanBuch } from './ui/bauplanBuch.js';
 import { AmeisenKarte } from './ui/ameisenKarte.js';
-import { ortById, kolonieAn, flugParameter } from './game/welt.js';
+import { ortById, kolonieAn, flugParameter, wespenParameter, BIOME } from './game/welt.js';
+import { wechsleKolonie, kolonienTick, aktiveId, kolonieName, kolonieBiom } from './game/kolonien.js';
+import { weltTick, baueRoute, routeAusbauen, krabbelschow, ROUTEN, BESUCHE } from './game/zivilisation.js';
 import { aktuelleStunde } from './quiz/stundenplan.js';
 import { ereignisFuerEinige, tagesEreignis } from './game/buerger.js';
 import { get, idx, hillTop, raumMasse } from './game/world.js';
@@ -106,15 +108,22 @@ const game = {
     if (o) sfx.click();
   },
   weltHover(sx, sy) { weltR.hover = weltR.ortAt(sx, sy); },
-  async starteHochzeitsflug(ortId) {
+  /** Das passende Flugspiel öffnen: 'ringe' (Ringflug) oder 'wespen' (Wespenalarm). */
+  async fliege(modus, ort, extra = {}) {
+    if (modus === 'wespen') {
+      const { openWespenalarm } = await import('./ui/wespenalarm.js');
+      return openWespenalarm(this, { ...wespenParameter(this.state, ort), koloniename: this.state.spieler.koloniename, ...extra });
+    }
+    return openHochzeitsflug(this, { ...flugParameter(this.state, ort), koloniename: this.state.spieler.koloniename, ...extra });
+  },
+  async starteHochzeitsflug(ortId, modus = 'ringe') {
     const ort = ortById(ortId);
     if (!ort || this.modalOffen()) return;
     if (kolonieAn(this.state, ortId)) { toast('Dort wohnt schon eure Tochterkolonie!', { icon: ort.icon }); return; }
     const b = this.hochzeitsflugStatus();
     if (!b.ok) { sfx.error(); toast('Noch nicht bereit: ' + b.gruende[0], { icon: '🪽', art: 'warn', dauer: 5000 }); return; }
     this.state.welt.versuche = (this.state.welt.versuche ?? 0) + 1;
-    const p = flugParameter(this.state, ort);
-    const erg = await openHochzeitsflug(this, { ...p, koloniename: this.state.spieler.koloniename });
+    const erg = await this.fliege(modus, ort);
     if (!erg?.erfolg) { this.hud.welt?.refresh(true); return; }
     const r = hochzeitsflug(this.state, ortId);
     weltR.selected = ortId;
@@ -122,6 +131,49 @@ const game = {
     this.hud.welt?.waehle(ort);
     this.hud.welt?.refresh(true);
     this.save();
+    if (r.kolonie) setTimeout(() => toast(`Tippe auf „🏠 Kolonie besuchen & bauen", um in ${r.kolonie.name} weiterzubauen!`, { icon: ort.icon, art: 'gold', dauer: 6000 }), 2500);
+    return r;
+  },
+  /** Übungsflug: jederzeit, ohne Voraussetzungen – für Spaß und Übung (gibt ein paar Sterne). */
+  async uebungsflug(modus = 'ringe') {
+    if (this.modalOffen()) return;
+    const ort = ortById(weltR.selected) && weltR.selected !== 'heim' ? ortById(weltR.selected) : ortById('lichtung');
+    const erg = await this.fliege(modus, ort, { uebung: true, name: `${ort.name} (Übungsflug)` });
+    if (erg?.erfolg) { this.state.res.sterne += 5; toast('Toller Übungsflug! +5 ⭐', { icon: modus === 'wespen' ? '🐝' : '🎯', art: 'gut' }); }
+    this.state.stats.uebungsfluege = (this.state.stats.uebungsfluege ?? 0) + 1;
+  },
+  /** Zu einer anderen Kolonie wechseln und ihr Nest zeigen. */
+  besucheKolonie(id) {
+    if (this.modalOffen()) return;
+    if (id !== aktiveId(this.state)) {
+      if (!wechsleKolonie(this.state, id)) return;
+      this.state.stats.kolonieBesuche = (this.state.stats.kolonieBesuche ?? 0) + 1;
+      renderer.setState(this.state);
+      revierR.setState(this.state);
+      this.ameisenKarte?.schliesse();
+      this.d = derive(this.state);
+      this.hud.planSig = ''; this.hud.panelSig = ''; this.hud.missionSig = '';
+      const B = BIOME[kolonieBiom(this.state, id)];
+      toast(`Willkommen in ${kolonieName(this.state, id)}! ${B.icon} ${B.name}: ${B.text}`, { icon: B.icon, art: 'gold', dauer: 5500 });
+      this.save();
+    }
+    if (this.modus !== 'nest') this.wechsleModus('nest'); else renderer.focusHome();
+    this.hud.update(this.d);
+  },
+  baueRoute(art, a, b) {
+    const r = baueRoute(this.state, art, a, b);
+    if (!r.ok) { sfx.error(); toast(r.grund, { icon: ROUTEN[art].icon, art: 'warn' }); return r; }
+    sfx.place();
+    toast(`${ROUTEN[art].name} zwischen ${kolonieName(this.state, a)} und ${kolonieName(this.state, b)} wird gebaut!`, { icon: ROUTEN[art].icon, art: 'gut' });
+    this.hud.welt?.refresh(true); this.save();
+    return r;
+  },
+  routeAusbauen(id) {
+    const route = this.state.welt.strassen.find(x => x.id === id);
+    const r = route ? routeAusbauen(this.state, route) : { ok: false, grund: 'Unbekannte Straße.' };
+    if (!r.ok) { sfx.error(); toast(r.grund, { icon: '🛣️', art: 'warn' }); return r; }
+    sfx.place(); toast(`Ausbau zur ${ROUTEN.strasse.stufen[route.stufe - 1]}!`, { icon: '🛣️', art: 'gut' });
+    this.hud.welt?.refresh(true); this.save();
     return r;
   },
   nachBauplan(typ) {
@@ -459,7 +511,7 @@ async function boot() {
   renderer.setState(vorschau);
   game.d = derive(vorschau);
   loop.start();
-  startScreen((name, kol) => begin(newGame(name, kol), true), () => begin(load() ?? newGame(), false));
+  startScreen((name, kol, lernmodus) => { const st = newGame(name, kol); st.einstellungen.lernmodus = lernmodus ?? 'stundenplan'; begin(st, true); }, () => begin(load() ?? newGame(), false));
 }
 
 function begin(state, neu) {
@@ -476,6 +528,7 @@ function begin(state, neu) {
   document.getElementById('hud').hidden = false;
   game.hud = new HUD(game);
   game.ameisenKarte = new AmeisenKarte(game, document.getElementById('hud'));
+  import('./ui/weltHud.js').then(mod => { if (!game.weltHolo) game.weltHolo = new mod.WeltHolo(game, document.getElementById('hud')); }).catch(e => console.info('Holo-HUD nicht verfügbar', e));
   setupInputOnce();
   startMusic();
   game.hud.update(game.d);
@@ -533,6 +586,13 @@ const loop = {
       this.acc += dt * st.einstellungen.tempo;
       let n = 0;
       while (this.acc >= 0.1 && n++ < 10) { game.d = tick(st, 0.1); this.acc -= 0.1; }
+      // Andere Kolonien & das Netz zwischen ihnen: einmal pro Spielsekunde
+      this.kolAcc = (this.kolAcc ?? 0) + dt * st.einstellungen.tempo;
+      if (this.kolAcc >= 1) {
+        this.kolAcc = Math.min(this.kolAcc - 1, 2);
+        hintergrundEreignisse(kolonienTick(st, 1));
+        weltEreignisse(weltTick(st, 1, game.d));
+      }
     } else if (!game.hud) {
       // Startbildschirm: Zeit langsam laufen lassen
       st.zeit += dt * 3;
@@ -544,6 +604,7 @@ const loop = {
     if (game.modus === 'revier') revierR.frame(fdt, game.d);
     else if (game.modus === 'welt') { weltR.flugBereit = !!game.d && hochzeitsflugBereit(st, game.d).ok; weltR.frame(fdt, game.d); }
     else renderer.frame(fdt, game.d);
+    game.weltHolo?.frame(dt);
     if (game.uebergang) zeichneUebergang(dt);
     // Automatisch sparsamer werden, wenn das Zeichnen dauerhaft zu lange braucht
     const ms = performance.now() - t0;
@@ -561,10 +622,11 @@ const loop = {
         toast('Du spielst schon 25 Minuten – Zeit für eine kleine Bewegungspause! Dein Ameisenstaat wartet auf dich. 🤸', { icon: '⏰', art: 'gold', dauer: 9000 });
       }
       this.hudT -= dt; this.missT -= dt;
-      if (this.hudT <= 0) { this.hudT = 0.25; game.hud.update(game.d); game.ameisenKarte?.update(); }
+      if (this.hudT <= 0) { this.hudT = 0.25; game.hud.update(game.d); game.ameisenKarte?.update(); if (game.modus === 'welt') game.weltHolo?.refresh(); }
       if (this.missT <= 0) {
         this.missT = 0.6;
         for (const m of pruefeMissionen(st, game.d)) belohneMission(m);
+        pruefeZivilisation();
       }
     }
   },
@@ -605,6 +667,49 @@ function zeichneUebergang(dt) {
     ctx.restore();
   }
   if (p >= 1) game.uebergang = null;
+}
+
+// ---------- Zivilisation: Meldungen aus anderen Kolonien und dem Netz ----------
+function hintergrundEreignisse(liste) {
+  for (const e of liste) {
+    if (e.typ === 'gebaut') throttleToast('bg-gebaut', 6, `In ${kolonieName(game.state, e.kolonie)} ist ${GEBAEUDE[e.data.typ].name} fertig!`, { icon: GEBAEUDE[e.data.typ].icon, art: 'gut' });
+    else if (e.typ === 'ausgebaut') throttleToast('bg-aus', 6, `In ${kolonieName(game.state, e.kolonie)}: Ausbau zu ${GEBAEUDE[e.data.typ].name} fertig!`, { icon: GEBAEUDE[e.data.typ].icon, art: 'gold' });
+    else if (e.typ === 'ausgewandert') throttleToast('bg-aus' + e.kolonie, 60, `${kolonieName(game.state, e.kolonie)} braucht deine Hilfe – schau mal vorbei!`, { icon: '🏘️', art: 'warn' });
+  }
+}
+function weltEreignisse(liste) {
+  for (const e of liste) {
+    if (e.typ === 'routeFertig') {
+      const R = ROUTEN[e.route.art];
+      sfx.built();
+      toast(`${R.name} fertig: ${kolonieName(game.state, e.route.a)} ⇄ ${kolonieName(game.state, e.route.b)}`, { icon: R.icon, art: 'gold' });
+      game.hud.welt?.refresh(true);
+    } else if (e.typ === 'besuch') {
+      const B = BESUCHE[e.besuch.art];
+      throttleToast('besuch', 25, `${B.name}: Gäste aus ${kolonieName(game.state, e.besuch.von)} in ${kolonieName(game.state, e.besuch.nach)} – ${e.lohn}`, { icon: B.icon, art: 'gut' });
+      ereignisFuerEinige(game.state, 1, `hat Gäste aus ${kolonieName(game.state, e.besuch.von)} im Hotel begrüßt ${B.icon}`);
+    }
+  }
+}
+function pruefeZivilisation() {
+  const st = game.state;
+  if (!st.welt.flugBereitErreicht && hochzeitsflugBereit(st, game.d).ok) {
+    st.welt.flugBereitErreicht = true;
+    sfx.fanfare(); konfetti(30);
+    toast('Krabbelschow-Typ I erreicht: Dein Volk ist flügge! Auf der Weltkarte 🌍 kannst du jetzt einen Hochzeitsflug starten.', { icon: '🪽', art: 'gold', dauer: 7000 });
+  }
+  game._ksT = (game._ksT ?? 0) + 1;
+  if (game._ksT % 4) return;
+  const ks = krabbelschow(st);
+  if (ks.typ > (st.welt.typErreicht ?? 0)) {
+    st.welt.typErreicht = ks.typ;
+    if (ks.typ >= 2) {
+      const S = ks.stufen[ks.typ - 1];
+      sfx.fanfare(); konfetti(60);
+      toast(`Krabbelschow-Typ ${ks.typ}: ${S.name}! ${S.text}`, { icon: S.icon, art: 'gold', dauer: 8000 });
+    }
+    game.save();
+  }
 }
 
 function belohneMission(m) {

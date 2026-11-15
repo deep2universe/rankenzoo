@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Gegenden-Galerie</title>
+<!-- Entwickler-Werkzeug: zeigt das Nest in jeder Gegend (biome.js) mit dem echten Renderer.
+     Start: node tools/serve.mjs 8097  →  http://localhost:8097/tools/biome-galerie.html
+     ?biom=sand        eine Gegend groß (Standard: Übersicht aller Gegenden)
+     &nacht=1          Nacht statt Tag
+     &w=1200&h=760     Größe der Ansicht, &zoom=1 Kamera-Zoom, &dx=0&dy=0 Kamera verschieben
+     &seed=1234        Welt-Seed, &t=3 Animationszeit (Sekunden), &kachel=480 Kachelbreite (Übersicht) -->
+<style>
+  body { margin: 0; background: #1b120a; color: #f3e3c8; font: 13px Fredoka, Nunito, sans-serif; }
+  #ansicht { display: block; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--kw), 1fr)); gap: 8px; padding: 8px; }
+  .grid figure { margin: 0; }
+  .grid figcaption { padding: 2px 4px; }
+  .grid img { width: 100%; display: block; border-radius: 6px; }
+  a { color: #ffd88a; text-decoration: none; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+import { BIOME } from '../src/game/biome.js';
+import { newGame, addRoom } from '../src/game/state.js';
+import { createWorld, dig, hillTop, computeConnectivity, setHill } from '../src/game/world.js';
+import { GROUND, HILL_X, SIM } from '../src/game/config.js';
+import { derive } from '../src/game/sim.js';
+import { Renderer } from '../src/render/renderer.js';
+
+const q = new URLSearchParams(location.search);
+const nacht = q.get('nacht') === '1';
+const seed = Number(q.get('seed') ?? 4242);
+const tAnim = Number(q.get('t') ?? 3);
+
+/** Kleines Startnest in der gewünschten Gegend. */
+function nestIn(biom) {
+  const st = newGame('Galerie', 'Galerie');
+  const world = createWorld(seed, biom);
+  st.world = world;
+  st.rooms = []; st.nextRoomId = 1;
+  setHill(world, Number(q.get('huegel') ?? 2));
+  const top = hillTop(world);
+  const qy = GROUND + 6;
+  for (let y = top; y < qy; y++) dig(world, HILL_X, y);
+  addRoom(st, 'koenigin', HILL_X - 1, qy, true);
+  for (let x = HILL_X + 1; x <= HILL_X + 6; x++) dig(world, x, GROUND + 3);
+  addRoom(st, 'vorrat', HILL_X + 7, GROUND + 2, true);
+  for (let x = HILL_X - 7; x < HILL_X - 1; x++) dig(world, x, GROUND + 7);
+  addRoom(st, 'brut', HILL_X - 10, GROUND + 6, true);
+  for (let y = GROUND + 7; y < GROUND + 13; y++) dig(world, HILL_X + 3, y);
+  addRoom(st, q.get('raum') ?? 'gaestehaus', HILL_X + 2, GROUND + 13, true);
+  computeConnectivity(world, st.rooms);
+  st.zeit = SIM.tagDauer * (nacht ? 0.86 : 0.3);
+  return st;
+}
+
+function zeige(renderer, biom, w, h) {
+  const st = nestIn(biom);
+  renderer.setState(st);
+  renderer.cam.z = Number(q.get('zoom') ?? Math.min(w / 1100, h / 700));
+  renderer.centerOn((HILL_X + 0.5) * 32 + Number(q.get('dx') ?? 0), GROUND * 32 - 60 + Number(q.get('dy') ?? 0));
+  const d = derive(st);
+  // ein paar Bilder laufen lassen (Ameisen verteilen sich, Animation läuft)
+  renderer.t = tAnim;
+  for (let i = 0; i < 4; i++) renderer.frame(0.05, d);
+}
+
+const app = document.getElementById('app');
+const fehler = [];
+window.addEventListener('error', e => fehler.push(String(e.message)));
+const einzel = q.get('biom');
+try {
+  if (einzel) {
+    const w = Number(q.get('w') ?? 1200), h = Number(q.get('h') ?? 760);
+    const cv = document.createElement('canvas');
+    cv.id = 'ansicht';
+    cv.style.width = w + 'px'; cv.style.height = h + 'px';
+    app.append(cv);
+    const r = new Renderer(cv);
+    zeige(r, einzel, w, h);
+  } else {
+    const kw = Number(q.get('kachel') ?? 480), kh = Math.round(kw * 0.62);
+    const cv = document.createElement('canvas');
+    cv.style.width = kw + 'px'; cv.style.height = kh + 'px';
+    cv.style.position = 'absolute'; cv.style.left = '-9999px';
+    document.body.append(cv);
+    const r = new Renderer(cv);
+    const grid = document.createElement('div');
+    grid.className = 'grid'; grid.style.setProperty('--kw', kw + 'px');
+    app.append(grid);
+    for (const [key, B] of Object.entries(BIOME)) {
+      zeige(r, key, kw, kh);
+      const img = new Image();
+      img.src = cv.toDataURL();
+      const fig = document.createElement('figure');
+      const cap = document.createElement('figcaption');
+      cap.innerHTML = `<a href="?biom=${key}${nacht ? '&nacht=1' : ''}">${B.icon} ${B.name} <small>(${key})</small></a>`;
+      fig.append(img, cap);
+      grid.append(fig);
+    }
+    cv.remove();
+  }
+} catch (e) { console.error(e); fehler.push(String(e.stack ?? e)); }
+document.title = fehler.length ? 'fehler' : 'fertig';
+window.galerieFehler = fehler;
+</script>
+</body>
+</html>
