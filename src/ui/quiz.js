@@ -6,6 +6,7 @@ import { themenVon, recordAnswer, pruefeEingabe, richtigeAntwortText, meistersch
 import {
   WOCHENPLAN, WOCHENTAGE, WOCHENTAGE_KURZ, STUNDEN_ZEITEN, STUNDEN_PRO_TAG, aktuelleStunde, stundeBeenden, stundenStatus,
   themaTests, fachTests, spielbareTests, offeneFaecher, bauplanVerteilung, testBelohnung, testFragen, testErgebnis, pruefeAltlasten, testStand,
+  freieWahl, istBestanden,
 } from '../quiz/stundenplan.js';
 import { schalteFrei, planVerfuegbar, istFrei, neuBaubar } from '../game/bauplaene.js';
 import { gebaeudeBild } from '../render/vorschau.js';
@@ -60,6 +61,33 @@ export function openQuiz(game) {
   const origClose = m.close;
   m.close = r => { closeTooltip(); origClose(r); game.pause(false); };
   const quizBonus = () => game.d.fx.quizBonus ?? 0;
+  const frei = () => freieWahl(s);
+  const start = () => (frei() ? fachWahl() : stundenplan());
+  const modusKnopf = () => h('button.btn.grau.klein.modus-knopf', { title: 'Lernmodus wechseln (bleibt gespeichert, gewonnene Baupläne bleiben erhalten)', onclick: () => {
+    s.einstellungen.lernmodus = frei() ? 'stundenplan' : 'frei'; game.save?.(); start();
+  } }, frei() ? '📅 Zum Stundenplan wechseln' : '🎈 Zur freien Wahl wechseln');
+
+  // ------------------------------------------------------------ Freie Wahl: Fächer
+  function fachWahl() {
+    m._key = null;
+    m.setFarbe('#ff9f1c', '#ffc93c'); m.setIcon('🎈');
+    m.setTitel('Freies Lernen', 'Wähle ein Fach – danach Thema und Test-Paket');
+    const karten = Object.entries(FAECHER).map(([k, f]) => {
+      const ft = fachTests(s, k);
+      const plaene = [...bauplanVerteilung(s, k).values()];
+      return h('button.fach-karte', { style: { '--f1': f.farbe, '--f2': f.farbe2 }, onclick: () => themenWahl(k, true) },
+        h('span.deko', f.icon), h('span.em', f.icon), h('span.nm', f.name), h('span.ort', f.ort),
+        plaene.length ? h('span.plaene', { title: 'Diese Baupläne kannst du hier gerade gewinnen' }, plaene.slice(0, 7).map(p => GEBAEUDE[p].icon).join('')) : h('span.plaene', { title: 'Hier gibt es gerade Rohstoffe' }, '🎁'),
+        h('span.geloest-zahl' + (ft.offen === 0 ? '.alles' : ''), ft.offen === 0 ? `🏆 Alle ${ft.gesamt} Tests bestanden!` : `📝 Bestanden: ${ft.bestanden} / ${ft.gesamt} · ★ ${ft.perfekt}`),
+        h('div.meister', h('span', 'Tests'), h('div.track', h('i', { style: { width: Math.round(ft.bestanden / Math.max(1, ft.gesamt) * 100) + '%' } })), h('b', Math.round(ft.bestanden / Math.max(1, ft.gesamt) * 100) + '%')));
+    });
+    m.render(h('div.faecher', karten),
+      h('div.sp-fuss',
+        h('span', `🃏 Joker: ${s.res.joker} · ✅ Richtige Antworten: ${s.lernen.richtig} · 🔥 Beste Serie: ${s.lernen.besteSerie}`),
+        h('div.sp-knoepfe', modusKnopf(),
+          h('button.btn.grau.klein', { onclick: () => openBauplanBuch(game) }, '📐 Bauplan-Buch'),
+          h('button.btn.grau.klein', { onclick: () => openFragenArchiv(game, { ausQuiz: true }) }, '🗂️ Fragen-Archiv'))));
+  }
 
   // ------------------------------------------------------------ Stundenplan
   function stundenplan() {
@@ -127,7 +155,7 @@ export function openQuiz(game) {
       h('h4.sp-unter', '📈 Bestandene Tests'), fortschritt,
       h('div.sp-fuss',
         h('span', `🃏 Joker: ${s.res.joker} · ✅ Richtige Antworten: ${s.lernen.richtig} · 🔥 Beste Serie: ${s.lernen.besteSerie}`),
-        h('div.sp-knoepfe',
+        h('div.sp-knoepfe', modusKnopf(),
           h('button.btn.grau.klein', { onclick: () => openBauplanBuch(game) }, '📐 Bauplan-Buch'),
           h('button.btn.grau.klein', { onclick: () => openFragenArchiv(game, { ausQuiz: true }) }, '🗂️ Fragen-Archiv'))),
     );
@@ -142,7 +170,7 @@ export function openQuiz(game) {
     const f = FAECHER[fach];
     const st = aktuelleStunde(s);
     m._key = null;
-    m.setTitel(f.name, `${freiarbeit ? 'Freiarbeit' : `${st.stunde + 1}. Stunde`} · ${f.ort} – wähle ein Thema`); m.setFarbe(f.farbe, f.farbe2); m.setIcon(f.icon);
+    m.setTitel(f.name, `${frei() ? 'Freie Wahl' : freiarbeit ? 'Freiarbeit' : `${st.stunde + 1}. Stunde`} · ${f.ort} – wähle ${frei() ? 'Thema und Test-Paket' : 'ein Thema'}`); m.setFarbe(f.farbe, f.farbe2); m.setIcon(f.icon);
     const verteilung = bauplanVerteilung(s, fach);
     const ft = fachTests(s, fach);
     const karten = themenVon(fach).map(t => {
@@ -160,6 +188,21 @@ export function openQuiz(game) {
           h('div.tk-lohn.fertig', h('span', '🏆 Gemeistert'), h('button.link', { onclick: () => openFragenArchiv(game, { fach, ausQuiz: true }) }, 'Fragen ansehen')));
       }
       const bel = testBelohnung(s, test, quizBonus(), plan);
+      if (frei()) {
+        // Freie Wahl: Jedes offene Test-Paket ist wählbar – mit sichtbarer Belohnung
+        const offen = tt.tests.filter(x => !istBestanden(s, x.id));
+        const planErst = offen.map(x => verteilung.get(x.id)).find(Boolean);
+        return h('div.thema-karte.frei' + (planErst ? '.mit-plan' : ''), { title: t.bildungsplan ?? '' },
+          h('div.tk-kopf', h('span.em', t.icon), h('div', h('div.nm', t.name), h('div.bs', t.beschreibung ?? ''))),
+          punkte,
+          h('div.pakete', offen.map(x => {
+            const pl = verteilung.get(x.id);
+            return h('button.paket' + (pl ? '.mit-plan' : ''), { onclick: () => testIntro(x, pl ?? null, freiarbeit), title: pl ? `Alle ${x.n} richtig = Bauplan ${GEBAEUDE[pl].name}` : 'Rohstoffe – je mehr richtig, desto mehr' },
+              h('b', `Paket ${x.nr}`), h('span.niv', niveauSterne(x.niveau)), h('span.lohn', pl ? GEBAEUDE[pl].icon : '🎁'));
+          })),
+          planErst ? h('div.tk-lohn.plan', h('div.tk-bild', gebaeudeBild(planErst, { zoom: 0.42 })), h('div', h('b', `${GEBAEUDE[planErst].icon} ${GEBAEUDE[planErst].name}`), h('small', '🏆 Bauplan für ein perfektes Paket')))
+            : h('div.tk-lohn', h('b', '🎁 Rohstoffe'), h('small', `bis ⭐ ${bel.sterneMax} je Paket`)));
+      }
       return h('button.thema-karte' + (plan ? '.mit-plan' : ''), { onclick: () => testIntro(test, plan, freiarbeit), title: t.bildungsplan ?? '' },
         h('div.tk-kopf', h('span.em', t.icon), h('div', h('div.nm', t.name), h('div.bs', t.beschreibung ?? ''))),
         punkte,
@@ -170,10 +213,12 @@ export function openQuiz(game) {
     });
     m.render(
       h('div.themen-kopfzeile',
-        h('button.btn.grau.klein', { onclick: stundenplan }, '← Stundenplan'),
+        h('button.btn.grau.klein', { onclick: start }, frei() ? '← Fächer' : '← Stundenplan'),
         h('span.fach-stand' + (ft.offen === 0 ? '.alles' : ''), `📝 Tests bestanden: ${ft.bestanden} / ${ft.gesamt}  ·  ★ perfekt: ${ft.perfekt}`),
         h('button.btn.grau.klein', { onclick: () => openFragenArchiv(game, { fach, ausQuiz: true }) }, '🗂️ Archiv')),
-      h('p.themen-tipp', '💡 Bei einem Thema mit Bauplan musst du ALLE Fragen richtig beantworten, um ihn zu bekommen. Sonst gibt es Rohstoffe – je mehr richtig, desto mehr!'),
+      h('p.themen-tipp', frei()
+        ? '💡 Such dir ein Test-Paket aus! Pakete mit Gebäude-Symbol bringen einen Bauplan, wenn ALLE Fragen richtig sind. 🎁 = Rohstoffe – je mehr richtig, desto mehr.'
+        : '💡 Bei einem Thema mit Bauplan musst du ALLE Fragen richtig beantworten, um ihn zu bekommen. Sonst gibt es Rohstoffe – je mehr richtig, desto mehr!'),
       h('div.themen-karten', karten),
     );
   }
@@ -456,14 +501,15 @@ export function openQuiz(game) {
     s.stats.testsBestanden = (s.stats.testsBestanden ?? 0) + (res.neuBestanden ? 1 : 0);
     s.stats.testsPerfekt = (s.stats.testsPerfekt ?? 0) + (res.perfekt ? 1 : 0);
     const st = aktuelleStunde(s);
-    const tagFertig = stundeBeenden(s, { fach: test.fach, test: test.id, richtig: erg.richtig, n: erg.n, bestanden: res.bestanden, perfekt: res.perfekt, plan: neuerPlan, frei: freiarbeit });
+    const tagFertig = frei() ? false : stundeBeenden(s, { fach: test.fach, test: test.id, richtig: erg.richtig, n: erg.n, bestanden: res.bestanden, perfekt: res.perfekt, plan: neuerPlan, frei: freiarbeit });
     if (res.perfekt) { konfetti(60); sfx.fanfare(); } else if (res.bestanden) sfx.coin(); else sfx.pop();
     const titel = res.perfekt ? 'Perfekt! Alles richtig! 🏆' : res.bestanden ? 'Test bestanden! ✅' : 'Gut geübt! 💪';
     m.setTitel(titel, `${f.name} · ${erg.richtig} von ${erg.n} richtig`);
     m.setIcon(res.perfekt ? '🏆' : res.bestanden ? '✅' : '💪');
     const bereich = h('div.erg-bereich');
     const weiter = h('div.erg-knoepfe',
-      h('button.btn.blau', { onclick: stundenplan }, tagFertig ? '🎒 Schulschluss – zum Stundenplan' : `📅 Nächste Stunde: ${FAECHER[WOCHENPLAN[st.wtag][Math.min(STUNDEN_PRO_TAG - 1, st.stunde + 1)]]?.name ?? ''}`),
+      frei() ? h('button.btn.blau', { onclick: () => themenWahl(test.fach, true) }, '📚 Nächstes Paket aussuchen')
+        : h('button.btn.blau', { onclick: stundenplan }, tagFertig ? '🎒 Schulschluss – zum Stundenplan' : `📅 Nächste Stunde: ${FAECHER[WOCHENPLAN[st.wtag][Math.min(STUNDEN_PRO_TAG - 1, st.stunde + 1)]]?.name ?? ''}`),
       neuerPlan
         ? h('button.btn.gruen', { onclick: () => { m.close(); game.nachBauplan?.(neuerPlan); } }, neuBaubar(neuerPlan) ? '🏗️ Jetzt bauen!' : '⬆️ Jetzt ausbauen!')
         : h('button.btn.gruen', { onclick: () => m.close() }, '🐜 Zum Ameisenstaat'));
@@ -477,7 +523,7 @@ export function openQuiz(game) {
       ),
       h('p.erg-satz', res.perfekt ? 'Wow – jede Frage beim ersten Versuch richtig!'
         : res.bestanden ? `Bestanden! ${plan ? `Für den Bauplan hätten alle ${erg.n} Antworten stimmen müssen – vielleicht klappt es beim nächsten Bauplan-Test.` : 'Die Rohstoffe gehören dir.'} Dieser Test ist jetzt erledigt.`
-          : `Für „bestanden" brauchst du ${bel.noetig} richtige Antworten. Kein Problem: Der Test wartet auf dich – in der nächsten ${f.name}-Stunde kannst du es nochmal versuchen. Die Sterne für richtige Antworten gehören dir!`),
+          : `Für „bestanden" brauchst du ${bel.noetig} richtige Antworten. Kein Problem: Der Test wartet auf dich – ${frei() ? 'du kannst ihn jederzeit nochmal wählen' : `in der nächsten ${f.name}-Stunde kannst du es nochmal versuchen`}. Die Sterne für richtige Antworten gehören dir!`),
       bereich, weiter,
       rundenListe(rundenEintraege(erg.liste)),
     ));
@@ -500,7 +546,7 @@ export function openQuiz(game) {
     game.save?.();
   }
 
-  stundenplan();
+  start();
   return m;
 }
 

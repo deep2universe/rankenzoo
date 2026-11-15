@@ -21,7 +21,7 @@ const NAH = 0.35;      // nahe Schnittebene
 const BAND = 4;        // Rasenstreifen-Breite
 const RATE = 5.5;      // Folge-Tempo der Königin (1/s)
 const EMAX = 100;
-const PRO_RING = { plus: 9, minus: 6, zehren: 3 }; // Flugkraft pro Ring
+const PRO_RING = { plus: 10, minus: 4, zehren: 2.2 }; // Flugkraft pro Ring (kinderfreundlich: Fehler kosten wenig)
 const HUEGEL_R = 4.6, HUEGEL_H = 2.4;
 
 const LOB = ['Super!', 'Klasse!', 'Toll!', 'Spitze!', 'Prima!', 'Wow!', 'Juhu!', 'Genau!'];
@@ -371,7 +371,7 @@ function bauRoute(o) {
 export function openHochzeitsflug(game, opts = {}) {
   const opt = {
     ringe: clamp(Math.round(opts.ringe ?? 20), 3, 60),
-    ringRadius: clamp(opts.ringRadius ?? 1, 0.4, 1.6),
+    ringRadius: clamp(opts.ringRadius ?? 1, 0.4, 1.8),
     tempo: clamp(opts.tempo ?? 1, 0.6, 1.8),
     energie: clamp(opts.energie ?? 1, 0.5, 2),
     wind: !!opts.wind,
@@ -809,7 +809,7 @@ export function openHochzeitsflug(game, opts = {}) {
         S.idx++;
         const dist = Math.hypot(S.ax - r.x, S.ay - r.y);
         const [sx, sy] = schirmVonWelt(S.ax, S.ay);
-        if (dist <= r.r * 0.92) {
+        if (dist <= r.r * 1.08) { // großzügige Trefferzone: knapp am Rand zählt auch
           r.status = 1; r.blitz = 1;
           S.hits++; S.serie++; S.beste = Math.max(S.beste, S.serie);
           S.E = Math.min(EMAX, S.E + PRO_RING.plus);

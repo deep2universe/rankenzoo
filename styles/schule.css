@@ -251,3 +251,37 @@ button.ak-freund:hover { box-shadow: 0 2px 0 #ffc93c, 0 0 0 2px #ffc93c inset; }
 
 /* Während des Hochzeitsflugs keine Hinweis-Toasts über dem Flugbild */
 body:has(.flug-modal) #toasts { display: none; }
+
+/* ---------- Lernmodus: Stundenplan oder freie Wahl ---------- */
+.lernmodus-wahl { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.lernmodus-karte { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 10px 8px; border-radius: 16px; background: #fff; border: 3px solid #eadcc6; color: #3a2614; text-align: center; transition: transform .12s, border-color .15s; }
+.lernmodus-karte .em { font-size: 30px; }
+.lernmodus-karte b { font-size: .95rem; }
+.lernmodus-karte small { font-size: .74rem; color: #8a6a4a; line-height: 1.25; font-family: 'Nunito', var(--font); }
+.lernmodus-karte.an { border-color: #ff9f1c; background: linear-gradient(180deg, #fff6dc, #ffe6b0); transform: translateY(-2px); box-shadow: 0 4px 0 #f0c876; }
+.pakete { display: flex; flex-wrap: wrap; gap: 6px; }
+.paket { display: flex; align-items: center; gap: 5px; padding: 6px 10px; border-radius: 12px; background: #f6ead8; border: 2px solid transparent; font-size: .8rem; color: #4a3218; transition: transform .1s, border-color .15s; }
+.paket:hover { transform: translateY(-2px); border-color: var(--honig); }
+.paket .niv { color: #e09a00; letter-spacing: 1px; font-size: .72rem; }
+.paket .lohn { font-size: 16px; }
+.paket.mit-plan { background: linear-gradient(135deg, #fff1c4, #ffe0a0); box-shadow: inset 0 0 0 2px rgba(255,190,60,.5); }
+.thema-karte.frei { cursor: default; }
+.modus-knopf { white-space: nowrap; }
+
+/* ---------- Kolonie-Wechsler ---------- */
+.kolonie-gruppe { display: flex; align-items: stretch; gap: 6px; position: relative; }
+.kolonie-wechsel { min-width: 46px; padding: 0 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); font-weight: 700; font-size: 1rem; white-space: nowrap; }
+.kolonie-wechsel:hover { background: var(--panel-2); }
+.kolonien-menue { position: absolute; top: calc(100% + 8px); left: 0; z-index: 30; width: min(360px, calc(100vw - 24px)); max-height: min(70vh, 560px); overflow-y: auto;
+  padding: 10px; border-radius: 18px; background: linear-gradient(180deg, #fffaf0, #f7ead6); color: #3a2614; box-shadow: 0 16px 40px rgba(0,0,0,.45); animation: popIn .25s cubic-bezier(.3,1.4,.6,1); scrollbar-width: thin; }
+.kolonien-menue[hidden] { display: none; }
+.km-kopf { font-weight: 700; color: #8a6a4a; margin: 2px 4px 8px; }
+.km-zeile { display: grid; grid-template-columns: 32px 1fr auto auto; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 8px; border-radius: 12px; background: #fff; margin-bottom: 5px; box-shadow: 0 2px 0 #e8d6bd; }
+.km-zeile:hover { box-shadow: 0 2px 0 #ffc93c, inset 0 0 0 2px #ffc93c; }
+.km-zeile.aktiv { background: linear-gradient(135deg, #fff1c4, #ffe0a0); }
+.km-zeile .em { font-size: 22px; text-align: center; }
+.km-zeile .nm { font-weight: 700; font-size: .9rem; line-height: 1.1; }
+.km-zeile .nm small { display: block; font-weight: 500; font-size: .72rem; color: #8a6a4a; }
+.km-zeile .zahl { font-size: .74rem; color: #6a5038; white-space: nowrap; }
+.km-tipp { font-size: .8rem; color: #6a5038; padding: 4px; }
+.km-welt { width: 100%; margin-top: 4px; padding: 8px; border-radius: 12px; background: linear-gradient(180deg, #b8d4ff, #5b8def); color: #0e2050; font-weight: 700; }

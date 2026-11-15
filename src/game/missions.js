@@ -1,11 +1,15 @@
 // Aufgaben (Missionen): führen durchs Spiel und belohnen Fortschritt.
 import { FAECHER, GEBAEUDE, QUELLEN } from './config.js';
+import { kolonieIds, kolonieDaten } from './kolonien.js';
+import { krabbelschow, hotelVon } from './zivilisation.js';
 
 // zählt Gebäude dieser Art – auch ausgebaute (eine Universität zählt z. B. auch als Kindergarten)
 const anz = (s, typ) => s.rooms.filter(r => r.bau >= 1 && GEBAEUDE[r.typ]?.linie === GEBAEUDE[typ].linie && GEBAEUDE[r.typ].lstufe >= GEBAEUDE[typ].lstufe).length;
 const pop = s => s.volk.arbeiterinnen + s.volk.drohnen + 1;
 const truppSumme = s => Object.values(s.revier?.trupps ?? {}).reduce((a, t) => a + (t.s ?? 0), 0);
 const NEUE_BAUTEN = ['sporthalle', 'eisladen', 'schuhladen', 'friseur', 'kita', 'theater', 'musikschule', 'bank', 'schwimmbad', 'spielplatz', 'rathaus'];
+const alleRooms = s => kolonieIds(s).flatMap(id => kolonieDaten(s, id)?.rooms ?? []);
+const anzUeberall = (s, linie) => alleRooms(s).filter(r => r.bau >= 1 && GEBAEUDE[r.typ]?.linie === linie).length;
 const pollenTrupp = s => Object.entries(s.revier?.trupps ?? {}).some(([id, t]) => t.s > 0 && QUELLEN[s.revier.quellen.find(q => q.id === +id)?.typ]?.pollen);
 
 export const MISSIONEN = [
@@ -33,6 +37,12 @@ export const MISSIONEN = [
     ziel: s => [s.stats.testsPerfekt ?? 0, 1], lohn: { sterne: 30, joker: 1 }, hinweis: '.aktion-gross.quiz' },
   { id: 'beobachten', icon: '🔍', titel: 'Wer bist du denn?', text: 'Tippe unten rechts auf die Lupe 🔍 und dann auf eine Ameise. Lerne sie kennen – mit Namen, Freundinnen und Träumen!',
     ziel: s => [s.stats.beobachtet ?? 0, 1], lohn: { sterne: 20 }, hinweis: '.lupe-btn' },
+  { id: 'startplatz', icon: '🪽', titel: 'Der Traum vom Fliegen', text: 'Den Bauplan hast du schon: Baue einen Hochzeitsflug-Startplatz am Rand des Ameisenhügels. Stelle im Volk-Fenster den Drohnen-Anteil etwas höher!',
+    ziel: s => [anzUeberall(s, 'hochzeit'), 1], lohn: { sterne: 30 }, hinweis: '[data-plan="hochzeit"]' },
+  { id: 'flug1', icon: '🌍', titel: 'Eine neue Kolonie', text: 'Wähle auf der Weltkarte 🌍 ein Ziel und fliege durch die Ringe – oder wehre im Wespenalarm die Wespen ab. Am Ziel entsteht eine Tochterkolonie!',
+    ziel: s => [kolonieIds(s).length - 1, 1], lohn: { sterne: 60, material: 20 }, hinweis: '.ms-welt' },
+  { id: 'besuch1', icon: '🏠', titel: 'Hausbesuch', text: 'Tippe auf der Weltkarte auf deine neue Kolonie und dann auf „Kolonie besuchen & bauen" – oder oben auf 🏘️.',
+    ziel: s => [(s.aktiveKolonie ?? 'heim') !== 'heim' || (s.stats.kolonieBesuche ?? 0) > 0 ? 1 : 0, 1], lohn: { sterne: 25 }, hinweis: '.kolonie-wechsel' },
   { id: 'erkunden1', icon: '🔭', titel: 'Ins Unbekannte', text: 'Wähle im Revier „🔭 Erkunden" und tippe in den Nebel. Deine Erkunderinnen entdecken neue Quellen!',
     ziel: s => [s.revier?.expeditionen ?? 0, 1], lohn: { sterne: 25 } },
   { id: 'forschung1', icon: '🔬', titel: 'Kluge Köpfe', text: 'Öffne die Forschung (🔬) und erforsche deine erste Technik. Forschungspunkte gibt es für richtige Quizantworten!',
@@ -63,6 +73,14 @@ export const MISSIONEN = [
     ziel: s => [s.lernen.besteSerie, 5], lohn: { sterne: 35, joker: 1 } },
   { id: 'uni', icon: '🎓', titel: 'Ameisen-Universität', text: 'Baue deinen Kindergarten Schritt für Schritt aus: Schule → Berufsschule → Gymnasium → Universität!',
     ziel: s => [anz(s, 'universitaet'), 1], lohn: { sterne: 60 } },
+  { id: 'strasse1', icon: '🛣️', titel: 'Ameisenstraße', text: 'Verbinde zwei Kolonien mit einer Ameisenstraße (Weltkarte → Kolonie antippen → Verbinden). Dann wird Nahrung getauscht!',
+    ziel: s => [(s.welt?.strassen ?? []).filter(r => r.bau >= 1).length, 1], lohn: { sterne: 40, material: 15 } },
+  { id: 'hotel1', icon: '🏨', titel: 'Willkommen, Gäste!', text: 'Baue ein Duft-Gästehaus. Dann können Ameisen aus anderen Kolonien zu Besuch kommen – zum Lernen, Tauschen und Feiern.',
+    ziel: s => [kolonieIds(s).filter(id => hotelVon(s, id).stufe > 0).length, 1], lohn: { sterne: 40, fp: 10 } },
+  { id: 'boten1', icon: '📨', titel: 'Duftpost', text: 'Baue eine Botenlinie zwischen zwei Kolonien. Botinnen tragen Wissen hin und her – das gibt mehr 🔬.',
+    ziel: s => [(s.welt?.boten ?? []).filter(r => r.bau >= 1).length, 1], lohn: { sterne: 30, fp: 10 } },
+  { id: 'krabbel2', icon: '🛰️', titel: 'Ameisen-Nachbarschaft', text: 'Erreiche Typ 2 auf der Krabbelschow-Skala (Holo-HUD 🛰️ auf der Weltkarte): 3 Kolonien und eine Straße.',
+    ziel: s => [Math.min(2, krabbelschow(s).typ), 2], lohn: { sterne: 80, joker: 2 } },
   { id: 'zelt1', icon: '⛺', titel: 'Zeltlager', text: 'Stelle mit dem Bauplan „Expeditions-Zelt" ein Zelt im Revier auf. Expeditionen starten dann von dort!',
     ziel: s => [(s.revier?.lager ?? []).filter(l => l.bau >= 1).length, 1], lohn: { sterne: 40, material: 20 } },
   { id: 'funde3', icon: '🧺', titel: 'Sammlerin von Schätzen', text: 'Bringe 3 Fundstücke ✨ aus dem Nebel nach Hause.',
@@ -85,8 +103,8 @@ export const MISSIONEN = [
     ziel: s => [s.lernen.richtig, 150], lohn: { sterne: 100, joker: 3 } },
   { id: 'allefaecher', icon: '🏆', titel: 'Alleskönnerin', text: 'Beantworte in jedem der 6 Fächer mindestens 10 Fragen richtig.',
     ziel: s => [Object.keys(FAECHER).filter(f => (s.lernen.proFach[f]?.r ?? 0) >= 10).length, 6], lohn: { sterne: 120 } },
-  { id: 'hochzeit', icon: '🪽', titel: 'Der Hochzeitsflug', text: 'Baue einen Startplatz, ziehe 10 Drohnen groß, wähle auf der Weltkarte 🌍 ein Ziel und fliege durch die Ringe dorthin.',
-    ziel: s => [s.stats.hochzeitsfluege, 1], lohn: { sterne: 150 } },
+  { id: 'kolonien6', icon: '📨', titel: 'Duftnetz-Zivilisation', text: 'Gründe 6 Ameisenstaaten, verbinde sie mit Botenlinien und baue Hotels – das ist Krabbelschow-Typ 3!',
+    ziel: s => [Math.min(3, krabbelschow(s).typ), 3], lohn: { sterne: 150, joker: 2 } },
   { id: 'reich', icon: '👑', titel: 'Ein echtes Ameisenreich', text: 'Erreiche 200 Ameisen und Hügelstufe 5.',
     ziel: s => [Math.min(pop(s), 200) / 200 + Math.min(s.world.hill, 5) / 5, 2], lohn: { sterne: 300 } },
 ];

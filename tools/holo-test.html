@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Holo-HUD-Testseite</title>
+  <!-- Entwicklerseite für das Holo-HUD der Welt-Ansicht (src/ui/weltHud.js) mit echtem Spielstand.
+       URL-Parameter: ?view=zivilisationen|netzwerk|skala|duft|entwicklung  &an=1 (HUD sofort an)
+                      &n=6 (Anzahl Tochterkolonien, 0–19)  &sel=lichtung  &zoom=1.4  &panel=0 (linkes Panel zu) -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles/main.css">
+  <link rel="stylesheet" href="../styles/strategie.css">
+  <link rel="stylesheet" href="../styles/schule.css">
+  <link rel="stylesheet" href="../styles/welt.css">
+  <link rel="stylesheet" href="../styles/holo.css">
+</head>
+<body class="modus-welt">
+  <canvas id="welt"></canvas>
+  <div id="hud">
+    <!-- Attrappen der Spiel-Oberfläche, damit das Layout realistisch ist -->
+    <div class="topbar"><div class="kolonie-card"><div class="krone">👑</div><div><div class="name">Krümelhausen</div><div class="rang">Testseite</div></div></div></div>
+    <div class="modus-schalter"><button class="ms-nest"><span class="em">🏠</span><span class="t">Nest</span></button><button class="ms-revier"><span class="em">🗺️</span><span class="t">Revier</span></button><button class="ms-welt"><span class="em">🌍</span><span class="t">Welt</span></button><i class="ms-kugel"></i></div>
+    <div class="zoom-tools"><button class="icon-btn">➕</button><button class="icon-btn">➖</button><button class="icon-btn">🏠</button></div>
+    <div class="aktionen"><button class="aktion-gross denk"><span class="em">🧠</span>Denksport</button><button class="aktion-gross quiz"><span class="em">🎒</span>Schule</button></div>
+    <div class="links"></div>
+  </div>
+  <script type="module">
+    import { WeltRenderer } from '../src/render/weltRenderer.js';
+    import { WeltHUD } from '../src/ui/weltUI.js';
+    import { WeltHolo } from '../src/ui/weltHud.js';
+    import { ORTE, ortById } from '../src/game/welt.js';
+    import { newGame } from '../src/game/state.js';
+    import { hochzeitsflug } from '../src/game/actions.js';
+    import { baueRoute, weltTick } from '../src/game/zivilisation.js';
+    import { kolonienTick } from '../src/game/kolonien.js';
+    import { tick, derive } from '../src/game/sim.js';
+
+    const P = new URLSearchParams(location.search);
+    // ---- realistischer Spielstand aus den echten Modulen
+    const state = newGame('Testkönigin', 'Krümelhausen');
+    state.volk.drohnen = 99;
+    Object.assign(state.res, { sterne: 5000, material: 3000, fp: 600, gang: 200 });
+    const orte = ['lichtung', 'blumenwiese', 'steingarten', 'bachufer', 'waldrand', 'kompost', 'baumstumpf', 'teich', 'gemuesegarten', 'sandhuegel',
+      'obstwiese', 'baumhaus', 'spielplatz', 'blumentopf', 'kornfeld', 'pilzwald', 'gewaechshaus', 'heide', 'felsen'].slice(0, P.has('n') ? +P.get('n') : 6);
+    for (const o of orte) { state.volk.drohnen = 99; hochzeitsflug(state, o); }
+    const routen = [['strasse', 'heim', 'lichtung'], ['strasse', 'heim', 'steingarten'], ['boten', 'heim', 'blumenwiese'], ['boten', 'lichtung', 'kompost'],
+      ['strasse', 'steingarten', 'bachufer'], ['boten', 'heim', 'waldrand'], ['strasse', 'lichtung', 'baumstumpf'], ['boten', 'heim', 'teich']];
+    for (const [art, a, b] of routen) if (orte.includes(a) || a === 'heim') if (orte.includes(b)) baueRoute(state, art, a, b);
+    // ein paar Gebäude: Hotels & Schulen in einigen Kolonien
+    const kd = state.kolonienDaten;
+    const bauen = (id, typ) => { const k = kd[id]; if (k) k.rooms.push({ id: k.nextRoomId++, typ, x: 0, y: 0, w: 1, h: 1, bau: 1 }); };
+    bauen('lichtung', 'hotel'); bauen('steingarten', 'gaestehaus'); bauen('bachufer', 'gaestehaus'); bauen('lichtung', 'schule'); bauen('blumenwiese', 'kita');
+    if (kd.kompost) kd.kompost.nahrung = 6;
+    for (let i = 0; i < 70; i++) { weltTick(state, 1, derive(state)); kolonienTick(state, 1); tick(state, 1); }
+    // zwei Routen, die noch im Bau sind
+    if (orte.includes('waldrand')) baueRoute(state, 'strasse', 'heim', 'waldrand');
+    if (orte.includes('kompost') && orte.includes('blumenwiese')) baueRoute(state, 'boten', 'blumenwiese', 'kompost');
+    for (let i = 0; i < 6; i++) weltTick(state, 1, derive(state));
+    // garantiert ein paar Besuche unterwegs
+    const W = state.welt;
+    for (const [von, nach, art, p] of [['heim', 'lichtung', 'studenten', 0.35], ['steingarten', 'bachufer', 'freunde', 0.6], ['lichtung', 'heim', 'nahrung', 0.2]]) {
+      const r = W.strassen.find(x => (x.a === von && x.b === nach) || (x.b === von && x.a === nach));
+      if (r && r.bau >= 1) W.besuche.push({ id: (W.nextBesuch = (W.nextBesuch ?? 1) + 1), route: r.id, von, nach, art, p, dauer: 40 });
+    }
+
+    // ---- Renderer, linkes Welt-Panel & Holo-HUD
+    const canvas = document.getElementById('welt');
+    const R = new WeltRenderer(canvas);
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, R.maxDpr);
+      canvas.width = Math.round(innerWidth * dpr); canvas.height = Math.round(innerHeight * dpr);
+      R.cache = null; R.clampCam();
+    };
+    resize();
+    addEventListener('resize', resize);
+    R.setState(state);
+    const game = {
+      state, weltR: R, modus: 'welt', d: derive(state),
+      hochzeitsflugStatus: () => ({ ok: true, gruende: [] }),
+      starteHochzeitsflug: id => console.log('starteHochzeitsflug', id),
+      besucheKolonie: id => { console.log('besucheKolonie', id); window.besucht = id; },
+      baueRoute: (art, a, b) => { const r = baueRoute(state, art, a, b); console.log('baueRoute', art, a, b, r.ok); return r; },
+      poke() {},
+    };
+    const weltHud = new WeltHUD(game, document.getElementById('hud'));
+    document.querySelector('.links').append(weltHud.panel);
+    if (P.get('panel') === '0') weltHud.panel.classList.add('zu');
+    game.hud = { welt: weltHud };
+    const holo = new WeltHolo(game, document.getElementById('hud'));
+    game.weltHolo = holo;
+    if (P.get('zoom')) R.zoomAt(innerWidth / 2, innerHeight / 2, +P.get('zoom'));
+    if (P.get('sel')) { const o = ortById(P.get('sel')); R.selected = o.id; weltHud.waehle(o); }
+    weltHud.refresh(true);
+    if (P.get('view')) holo.setView(P.get('view'));
+    if (P.get('an') === '1' && !holo.an) holo.toggle(true, true);
+    if (P.get('an') === '0' && holo.an) holo.toggle(false, true);
+    Object.assign(window, { R, holo, game, state, weltHud });
+
+    // Steuerung wie im Spiel: Ziehen = verschieben, Rad = zoomen, Klick = Ort wählen, U / 1–5 = Holo-HUD
+    let drag = null;
+    const pos = e => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
+    canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); const [x, y] = pos(e); drag = { x, y, moved: 0 }; });
+    canvas.addEventListener('pointermove', e => {
+      const [x, y] = pos(e);
+      if (!drag) { try { R.hover = R.ortAt(x, y); } catch { R.hover = null; } return; }
+      drag.moved += Math.hypot(x - drag.x, y - drag.y);
+      R.pan(x - drag.x, y - drag.y); drag.x = x; drag.y = y;
+    });
+    canvas.addEventListener('pointerup', e => {
+      const [x, y] = pos(e);
+      if (drag && drag.moved < 8) { let o = null; try { o = R.ortAt(x, y); } catch { o = null; } R.selected = o?.id ?? null; weltHud.waehle(o); }
+      drag = null;
+    });
+    canvas.addEventListener('wheel', e => { e.preventDefault(); const [x, y] = pos(e); R.zoomAt(x, y, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+    addEventListener('keydown', e => { if (holo.onKey(e)) e.preventDefault(); });
+
+    // Falls der Welt-Renderer gerade umgebaut wird und wirft: einfache Ersatzkarte zeichnen (nur für diese Testseite)
+    let ersatzGemeldet = false;
+    function ersatzKarte(err) {
+      if (!ersatzGemeldet) { ersatzGemeldet = true; console.info('Welt-Renderer wirft – Ersatzkarte:', err.message); }
+      const c = R.ctx, dpr = canvas.width / innerWidth;
+      c.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const g = c.createLinearGradient(0, 0, innerWidth, innerHeight);
+      g.addColorStop(0, '#7fb85a'); g.addColorStop(0.5, '#9cc96a'); g.addColorStop(1, '#6aa24c');
+      c.fillStyle = g; c.fillRect(0, 0, innerWidth, innerHeight);
+      for (const o of [ortById('heim'), ...ORTE]) {
+        const [x, y] = R.worldToScreen(o.x, o.y);
+        c.fillStyle = 'rgba(60,90,30,.35)'; c.beginPath(); c.arc(x, y, 60 * R.cam.z, 0, Math.PI * 2); c.fill();
+        c.font = `${Math.round(70 * R.cam.z)}px sans-serif`; c.textAlign = 'center'; c.fillText(o.icon, x, y + 24 * R.cam.z);
+        c.font = '600 12px Fredoka, sans-serif'; c.fillStyle = '#20340f'; c.fillText(o.name, x, y + 60 * R.cam.z + 14);
+      }
+    }
+    let last = performance.now(), frames = 0, ms = 0, holoMs = 0, hudT = 0, simT = 0;
+    function loop(now) {
+      const dt = Math.min(0.05, (now - last) / 1000); last = now;
+      weltTick(state, dt, game.d);
+      simT += dt;
+      if (simT > 1) { simT = 0; kolonienTick(state, 1); tick(state, 1); game.d = derive(state); }
+      const t0 = performance.now();
+      try { R.frame(dt, { tagPhase: 0.3 }); } catch (err) { ersatzKarte(err); }
+      if (window.holdAnim != null) holo.anim = window.holdAnim - Math.max(0, Math.min(0.1, dt)); // Testhilfe: Animation einfrieren
+      const t1 = performance.now();
+      holo.frame(dt);
+      holoMs += performance.now() - t1;
+      ms += performance.now() - t0; frames++;
+      window.holoMs = holoMs / frames;
+      hudT -= dt;
+      if (hudT <= 0) { hudT = 0.25; holo.refresh(); weltHud.refresh(); }
+      window.frameMs = ms / frames;
+      requestAnimationFrame(loop);
+    }
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>

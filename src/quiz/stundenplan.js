@@ -127,8 +127,15 @@ export function fachTests(state, fach) {
   return { gesamt: ts.length, bestanden, offen: ts.length - bestanden, perfekt: ts.filter(t => testStand(state, t.id)?.perfekt).length };
 }
 
-/** Spielbare Tests eines Fachs (je Thema der nächste offene) in Themen-Reihenfolge. */
+/** Freie Wahl statt Stundenplan? Dann darf das Kind jedes offene Test-Paket selbst aussuchen. */
+export const freieWahl = state => state.einstellungen?.lernmodus === 'frei';
+
+/**
+ * Spielbare Tests eines Fachs in Themen-Reihenfolge: mit Stundenplan je Thema der nächste offene Test,
+ * bei freier Wahl alle offenen Test-Pakete.
+ */
 export function spielbareTests(state, fach) {
+  if (freieWahl(state)) return themenVon(fach).flatMap(t => testsVon(fach, t.key).filter(x => !istBestanden(state, x.id)));
   return themenVon(fach).map(t => naechsterTest(state, fach, t.key)).filter(Boolean);
 }
 
@@ -148,7 +155,8 @@ export function bauplanVerteilung(state, fach) {
   const map = new Map();
   const frei = [...spielbar];
   // Höchstens gut die Hälfte der Themen trägt einen Bauplan – so bleibt er etwas Besonderes und das Kind kann wählen.
-  const grenze = Math.max(3, Math.ceil(spielbar.length * 0.5));
+  const themen = new Set(spielbar.map(t => t.thema)).size;
+  const grenze = Math.max(3, Math.ceil(themen * 0.5));
   for (const typ of [...eigen, ...fremd]) {
     if (!frei.length || map.size >= grenze) break;
     const need = noetigesNiveau(typ);

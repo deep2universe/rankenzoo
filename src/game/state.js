@@ -4,12 +4,13 @@ import { createRevier } from './revier.js';
 import { startBauplaene, migriereBauplaene } from './bauplaene.js';
 import { createWelt } from './welt.js';
 import { createSchule } from '../quiz/stundenplan.js';
+import { neueKolonieDaten } from './kolonien.js';
 import { createWorld, placeRoom, dig, serializeWorld, deserializeWorld, hillTop, computeConnectivity } from './world.js';
 
 export function newGame(name = 'Königin', koloniename = 'Krümelhausen') {
   const world = createWorld(Math.floor(Math.random() * 1e6));
   const state = {
-    version: 3,
+    version: 4,
     spieler: { name, koloniename },
     zeit: 0,
     res: { sterne: 40, gang: 14, nahrung: 80, joker: 3, material: 10, fp: 0 },
@@ -26,11 +27,13 @@ export function newGame(name = 'Königin', koloniename = 'Krümelhausen') {
     stats: { gegraben: 0, gebaut: 0, quizRunden: 0, minispiele: 0, hochzeitsfluege: 0, ersetzt: 0, forschungen: 0, handel: 0, revierBesuche: 0 },
     forschung: { fertig: [], aktiv: null },
     befehle: { bauMax: 3, ammen: 'normal' },
-    einstellungen: { ton: true, musik: true, vorlesen: true, tempo: 1 },
+    einstellungen: { ton: true, musik: true, vorlesen: true, tempo: 1, lernmodus: 'stundenplan' },
     tutorial: { schritt: 0 },
     schule: createSchule(),
     welt: createWelt(),
     buerger: { liste: [], nextId: 1 },
+    aktiveKolonie: 'heim',
+    kolonienDaten: {},
     world,
   };
   state.revier = createRevier(world.seed);
@@ -53,10 +56,15 @@ export function addRoom(state, typ, x, y, fertig = false) {
   return room;
 }
 
+/** Spielstand in ein speicherbares Objekt verwandeln (Gelände als Text). */
+export function zuSpeicher(state) {
+  const kolonienDaten = Object.fromEntries(Object.entries(state.kolonienDaten ?? {}).map(([id, k]) => [id, { ...k, world: serializeWorld(k.world) }]));
+  return { ...state, world: serializeWorld(state.world), kolonienDaten, _info: undefined, gespeichert: Date.now() };
+}
+
 export function save(state) {
   try {
-    const data = { ...state, world: serializeWorld(state.world), gespeichert: Date.now() };
-    localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+    localStorage.setItem(SAVE_KEY, JSON.stringify(zuSpeicher(state)));
     return true;
   } catch (e) {
     console.warn('Speichern fehlgeschlagen', e);
@@ -73,24 +81,34 @@ export function saveInfo() {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (!d) return null;
     const pop = d.volk.arbeiterinnen + d.volk.drohnen + 1;
-    return { name: d.spieler.name, kolonie: d.spieler.koloniename, pop, gespeichert: d.gespeichert };
+    return { name: d.spieler.name, kolonie: d.spieler.koloniename, pop, kolonien: 1 + (d.welt?.kolonien?.length ?? 0), gespeichert: d.gespeichert };
   } catch { return null; }
+}
+
+/** Gespeichertes Objekt wieder in einen Spielstand verwandeln. */
+export function ausSpeicher(d) {
+  d.rooms = d.rooms.filter(r => GEBAEUDE[r.typ]);
+  stempleMasse(d.rooms);
+  d.world = deserializeWorld(d.world, d.rooms);
+  for (const k of Object.values(d.kolonienDaten ?? {})) {
+    k.rooms = k.rooms.filter(r => GEBAEUDE[r.typ]);
+    stempleMasse(k.rooms);
+    k.world = deserializeWorld(k.world, k.rooms);
+    computeConnectivity(k.world, k.rooms);
+  }
+  computeConnectivity(d.world, d.rooms);
+  // Felder späterer Versionen ergänzen
+  d.lernen.verlauf ??= [];
+  d.tutorial ??= { schritt: 99 };
+  d.missionen.gesehen ??= [];
+  migriere(d);
+  return d;
 }
 
 export function load() {
   try {
     const d = JSON.parse(localStorage.getItem(SAVE_KEY));
-    if (!d) return null;
-    d.rooms = d.rooms.filter(r => GEBAEUDE[r.typ]);
-    stempleMasse(d.rooms);
-    d.world = deserializeWorld(d.world, d.rooms);
-    computeConnectivity(d.world, d.rooms);
-    // Felder späterer Versionen ergänzen
-    d.lernen.verlauf ??= [];
-    d.tutorial ??= { schritt: 99 };
-    d.missionen.gesehen ??= [];
-    migriere(d);
-    return d;
+    return d ? ausSpeicher(d) : null;
   } catch (e) {
     console.warn('Laden fehlgeschlagen', e);
     return null;
@@ -133,6 +151,14 @@ export function migriere(d) {
   d.schule ??= createSchule();
   d.welt ??= createWelt();
   d.buerger ??= { liste: [], nextId: 1 };
-  d.version = 3;
+  // Version 4: mehrere bebaubare Kolonien, Straßen, Botenlinien, Besuche
+  d.aktiveKolonie ??= 'heim';
+  d.kolonienDaten ??= {};
+  const W = d.welt;
+  W.strassen ??= []; W.boten ??= []; W.besuche ??= []; W.nextRoute ??= 1; W.bewusstsein ??= 0;
+  for (const k of W.kolonien ?? []) if (!d.kolonienDaten[k.ort] && d.aktiveKolonie !== k.ort) d.kolonienDaten[k.ort] = neueKolonieDaten(d, k.ort);
+  d.bauplaene.hochzeit ??= { tag: 1, quelle: 'start' };
+  d.einstellungen.lernmodus ??= 'stundenplan';
+  d.version = 4;
   return d;
 }

@@ -18,12 +18,13 @@ Tests:
 npm test
 ```
 
-`npm test` prüft das Schema der Fragenbanken und führt Tests für Quiz-Engine, Generatoren, Simulation, die Strategie-Ebene (Revier, Forschung, Handel, alle Gebäude) sowie Stundenplan, Tests, Bauplan-Vergabe, Ausbau, Zelte, Bürgerinnen und Welt aus.
+`npm test` prüft das Schema der Fragenbanken und führt Tests für Quiz-Engine, Generatoren, Simulation, die Strategie-Ebene (Revier, Forschung, Handel, alle Gebäude) sowie Stundenplan, Tests, Bauplan-Vergabe, Ausbau, Zelte, Bürgerinnen, Welt sowie mehrere Kolonien, Speichern, Straßen, Hotels, Krabbelschow-Skala und freie Wahl aus.
 
-Entwickler-Seiten (über den Server öffnen): `tools/raeume-galerie.html` (alle Gebäude & Ausbaustufen), `tools/flug-test.html` (Hochzeitsflug), `tools/welt-test.html` (Weltkarte).
+Entwickler-Seiten (über den Server öffnen): `tools/raeume-galerie.html` (alle Gebäude & Ausbaustufen), `tools/flug-test.html` (Ringflug), `tools/wespenalarm-test.html` (Wespenalarm mit Szenarien), `tools/welt-test.html` (Weltkarte), `tools/holo-test.html` (Holo-HUD), `tools/biome-galerie.html` (alle 20 Gegenden).
 
 ## Was steckt drin?
 
+- **Zwei Lernmodi (Wahl beim Spielstart, jederzeit änderbar):** 📅 **Mit Stundenplan** oder 🎈 **Freie Wahl** – dann sucht sich das Kind Fach, Thema und Test-Paket selbst aus. Die möglichen Gewinne (Baupläne mit Gebäudebild oder Rohstoffe) sind in beiden Modi vorab sichtbar; gewonnene Baupläne bleiben immer erhalten.
 - **Schule mit Stundenplan 🎒:**
   - Eine Schulwoche (Mo–Fr, je 4 Stunden): Deutsch 5, Mathe 5, Sachunterricht 3, Sport & Miteinander 3, Englisch 2, Musik & Kunst 2 Stunden. Das Fach der aktuellen Stunde ist vorgegeben, das **Thema wählt das Kind selbst**.
   - Jedes Thema ist in feste **Tests** (ca. 6 Fragen) aufgeteilt, vom leichten Test 1 bis zum kniffligen letzten Test – insgesamt 228 Tests. **Bestandene Tests kommen nicht wieder** (ab der Hälfte richtig). Nicht bestandene Tests warten auf die nächste Stunde des Fachs.
@@ -44,7 +45,11 @@ Entwickler-Seiten (über den Server öffnen): `tools/raeume-galerie.html` (alle 
   - 🗺️ **Revier** (Draufsicht): die Wiese rund um den Hügel. Hier gibst du den Ameisen **Befehle**: Sammel-Trupps zu Futterquellen schicken, Wächterinnen gegen Störenfriede abstellen, **Expeditionen** in den Nebel senden, Schätze finden, mit einem Nachbarvolk handeln. Wetter und Tageszeit wirken sich aus.
   - 🌍 **Welt** (Übersichtskarte): das Heimatnest mit seinem Revier inmitten des Gartens, dazu 9 Orte für neue Kolonien (Lichtung, Blumenwiese, Bachufer, Waldrand, Baumstumpf, Gemüsegarten, Sandhügel, Spielplatz, Blumentopf).
   - Der Wechsel wird mit einer Iris-Überblendung vom Ameisenhügel aus animiert; die Oberfläche wechselt ihr Farbthema.
-- **Hochzeitsflug als eigenes Spiel 🪽:** Auf der Weltkarte wählt das Kind ein Ziel. Dann steuert es die junge Königin (Maus, Finger oder Pfeiltasten) durch goldene Ringe zum Zielort. Gefangene Ringe geben Flugkraft, verpasste kosten welche; weite Ziele haben mehr und kleinere Ringe und Windböen. Gelingt der Flug, entsteht dort eine **Tochterkolonie**, die dem Heimatvolk dauerhaft einen Bonus schenkt. Misslingt er, landet die Königin sanft und es kann sofort nochmal versucht werden. Flugfeld und Hochzeitsflughafen machen die Ringe größer.
+- **Viele Ameisenstaaten (bis zu 20):** Jede per Hochzeitsflug gegründete Kolonie ist **voll bebaubar** wie das Heimatnest – Untergrund, Hügel und Wiese, mit eigenem Volk, eigener Nahrung und eigenem Revier. Jede liegt in einer eigenen **Gegend** (Sandhügel, Seerosenteich, Pilzwald, Kornfeld, Blumentopf am Fenster …), die man an Boden, Hügel, Pflanzen und Hintergrund sofort erkennt. Neue Kolonien starten mit einem fertigen Startnest, mitgeflogenen Arbeiterinnen und einem Gründungsbonus, damit es ohne langes Warten weitergeht. Sterne, Baumaterial, Forschung und **Baupläne gelten für alle Kolonien**. Gewechselt wird über 🏘️ oben links oder auf der Weltkarte; ruhende Kolonien wachsen im Hintergrund weiter.
+- **Netz zwischen den Kolonien:** 🛣️ **Ameisenstraßen** (Trampelpfad → Ameisenstraße → Duft-Autobahn) gleichen Nahrung aus und bringen Handel; 📨 **Botenlinien** tragen Wissen per Duftpost (mehr 🔬, Quiz-Bonus). Mit **Hotels** (Duft-Gästehaus → Ameisen-Hotel → Grandhotel) kommen Gäste: Studentenaustausch, Nahrungstausch, Duftspur-Konferenzen und Freundschaftsbesuche. So wächst das **kollektive Ameisen-Bewusstsein**.
+- **Holo-HUD 🛰️ auf der Weltkarte (Taste U):** eine blaue, holografische Ansicht mit fünf Views – Zivilisationen, Netzwerk & Handel, **Krabbelschow-Skala** (die Kardaschow-Skala für Ameisen: Typ I = bereit für den ersten Hochzeitsflug … Typ V = alle 20 Ameisenstaaten), Duftstoffe und Entwicklung (wo fehlen Hotels, Straßen, Schulen?).
+- **Hochzeitsflug als eigenes Spiel 🪽 – in zwei Varianten:** 🎯 **Ringflug** (große Ringe, Wind bleibt spannend) und 🐝 **Wespenalarm** (Wespen ausweichen, mit unendlich Nektar „freundlich zur Aufgabe zwingen", viele Power-up-Blumen schalten neue Nektar-Waffen frei). Der Startplatz-Bauplan ist von Anfang an da, wenige Drohnen genügen; **Übungsflüge** gehen jederzeit.
+- **Ablauf des Flugs:** Auf der Weltkarte wählt das Kind ein Ziel. Dann steuert es die junge Königin (Maus, Finger oder Pfeiltasten) durch goldene Ringe zum Zielort. Gefangene Ringe geben Flugkraft, verpasste kosten welche; weite Ziele haben mehr und kleinere Ringe und Windböen. Gelingt der Flug, entsteht dort eine **Tochterkolonie**, die dem Heimatvolk dauerhaft einen Bonus schenkt. Misslingt er, landet die Königin sanft und es kann sofort nochmal versucht werden. Flugfeld und Hochzeitsflughafen machen die Ringe größer.
 - **Größeres Revier (64 × 44 Felder):** mit Blumenwiesen 🌸, Löwenzahn 🌼 und Kleeblüten ☘️ – **Pollen** ist eiweißreich und lässt die Brut schneller wachsen –, Pilzkreisen, alten Eichen, einem zweiten Teich mit Bach und **16 Fundstücken** im Nebel (Glasmurmel, Schneckenhaus, Bernstein, Kompass …), die Expeditionen heimbringen und die in einer Sammlung landen.
 - **Zelte & Lager ⛺:** Mit dem Bauplan „Expeditions-Zelt" stellt das Kind im erkundeten Revier Zelte auf. Expeditionen starten vom nächsten Lager, Sammel-Wege werden kürzer, fertige Lager lüften den Nebel. Ausbau: Zelt → Basislager → Außenposten (eine Expedition mehr).
 - **Aufbau-Strategie:**
@@ -78,6 +83,7 @@ Entwickler-Seiten (über den Server öffnen): `tools/raeume-galerie.html` (alle 
 | ⇧ Shift | ins Revier | zur Welt (dort: zurück ins Nest) |
 | Q / M | Schule / Denksport | Schule / Denksport |
 | B | Ameisen-Beobachtung | Ameisen-Beobachtung |
+| U | – | Welt: Holo-HUD an/aus (1–5 = Views) |
 | Z | – | Zelt aufstellen |
 | F | Forschung | Forschung |
 | G / X | Gang graben / Abriss | – |
@@ -94,7 +100,8 @@ styles/main.css            Gestaltung
 src/main.js                Spielsteuerung & Hauptschleife
 src/game/                  Konfiguration & Entwicklungslinien, Welt/Gitter, Simulation, Aktionen, Aufgaben, Spielstand,
                            Revier & Lager (revier.js), Forschung, Baupläne & Ausbau (bauplaene.js),
-                           Weltkarte & Tochterkolonien (welt.js), Bürgerinnen (buerger.js)
+                           Weltkarte & Orte (welt.js), Gegenden (biome.js), mehrere Kolonien (kolonien.js),
+                           Netz, Besuche, Krabbelschow-Skala, Duftkarte (zivilisation.js), Bürgerinnen (buerger.js)
 src/render/                Canvas-Renderer: Gelände, Kammern, Ameisen, Himmel, Revier-Karte, Sprite-Caches
 src/ui/                    Oberfläche: HUD, Schule/Quiz, Bauplan-Buch, Ameisen-Karte, Hochzeitsflug, Welt, Revier, …
 src/quiz/                  Quiz-Engine, Aufgaben-Generatoren, Stundenplan & Tests (stundenplan.js)

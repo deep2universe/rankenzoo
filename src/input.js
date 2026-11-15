@@ -111,6 +111,7 @@ export function setupInput(game) {
     if (game.modalKey(e)) { e.preventDefault(); return; }
     if (game.modalOffen()) { if (e.key === 'Escape') game.closeModal(); return; }
     const k = e.key.toLowerCase();
+    if (welt() && game.weltHolo?.onKey?.(e)) { e.preventDefault(); return; }
     if (revier()) {
       if (k === 'escape') { game.revierR.tool = null; game.revierR.selected = null; game.hud.revier?.waehle(null); game.hud.revier?.waehleLager(null); if (game.weltR) game.weltR.selected = null; game.hud.welt?.waehle(null); }
       else if (k === 'e' && !welt()) game.hud.revier?.expWerkzeug();

@@ -7,6 +7,9 @@ import { RevierHUD } from './revierUI.js';
 import { TECHS } from '../game/forschung.js';
 import { baubarePlaene, baukosten } from '../game/bauplaene.js';
 import { WeltHUD } from './weltUI.js';
+import { kolonieIds, kolonieName, aktiveId, kolonieBiom } from '../game/kolonien.js';
+import { BIOME } from '../game/biome.js';
+import { kolonieListe } from '../game/zivilisation.js';
 
 const TIPPS = {
   nahrung: 'Mehr Sammlerinnen, Pilzgarten, Blattlaus-Weide oder Bäckerei – oder Denksport spielen!',
@@ -36,8 +39,10 @@ export class HUD {
     };
     this.kolonie = h('div.kolonie-card', { onclick: () => this.togglePanel(), title: 'Volk / Revier-Kommando ein- und ausblenden' },
       h('div.krone', '👑'), h('div', h('div.name', ''), h('div.rang', '')));
+    this.kolWechsel = h('button.kolonie-wechsel', { title: 'Kolonie wechseln', onclick: e => { e.stopPropagation(); this.kolonienMenue(); } }, '🏘️');
+    this.kolMenue = h('div.kolonien-menue', { hidden: true });
     const top = h('div.topbar',
-      this.kolonie,
+      h('div.kolonie-gruppe', this.kolonie, this.kolWechsel, this.kolMenue),
       h('div.res-leiste',
         pill('sterne', '⭐', 'Sterne – verdienst du im Quiz. Damit baust du Kammern.'),
         pill('gang', '🧱', 'Gangstücke – zum Graben neuer Gänge.'),
@@ -93,6 +98,25 @@ export class HUD {
     this.panel.classList.toggle('zu', !this.panelOffen);
     this.revier.panel.classList.toggle('zu', !this.panelOffen);
     this.welt.panel.classList.toggle('zu', !this.panelOffen);
+  }
+
+  /** Aufklappliste aller Kolonien – Tippen wechselt in deren Nest. */
+  kolonienMenue(zu) {
+    const g = this.game, s = g.state;
+    if (zu || !this.kolMenue.hidden) { this.kolMenue.hidden = true; return; }
+    const liste = kolonieListe(s, g.d);
+    fill(this.kolMenue,
+      h('div.km-kopf', `🏘️ Deine ${liste.length} Ameisenstaat${liste.length > 1 ? 'en' : ''}`),
+      liste.map(k => h('button.km-zeile' + (k.aktiv ? '.aktiv' : ''), { onclick: () => { this.kolMenue.hidden = true; g.besucheKolonie(k.id); } },
+        h('span.em', BIOME[k.biom]?.icon ?? '🏡'),
+        h('span.nm', k.name, h('small', BIOME[k.biom]?.name ?? '')),
+        h('span.zahl', `🐜 ${Math.round(k.pop)} · ${Math.round(k.zufriedenheit)} %`),
+        k.aktiv ? h('span.hier', '📍') : null)),
+      liste.length < 2 ? h('div.km-tipp', '🪽 Mit einem Hochzeitsflug (Weltkarte 🌍) gründest du neue Kolonien.') : null,
+      h('button.km-welt', { onclick: () => { this.kolMenue.hidden = true; g.wechsleModus('welt'); } }, '🌍 Zur Weltkarte'));
+    this.kolMenue.hidden = false;
+    const weg = ev => { if (!this.kolMenue.contains(ev.target) && ev.target !== this.kolWechsel) { this.kolMenue.hidden = true; window.removeEventListener('pointerdown', weg, true); } };
+    setTimeout(() => window.addEventListener('pointerdown', weg, true), 0);
   }
 
   befehl(k, v) {
@@ -157,8 +181,11 @@ export class HUD {
     set('zufrieden', Math.round(d.zufriedenheit) + ' %', null, d.zufriedenheit / 100);
     this.res.zufrieden.querySelector('.ic').textContent = gesicht(d.zufriedenheit);
     const rang = RAENGE[d.rang];
-    this.kolonie.querySelector('.name').textContent = s.spieler.koloniename;
-    this.kolonie.querySelector('.rang').textContent = `${rang.icon} ${rang.name} · Tag ${d.tag}`;
+    const kid = aktiveId(s);
+    this.kolonie.querySelector('.name').textContent = kolonieName(s, kid);
+    this.kolonie.querySelector('.rang').textContent = `${kid === 'heim' ? '' : (BIOME[kolonieBiom(s, kid)]?.icon ?? '') + ' '}${rang.icon} ${rang.name} · Tag ${d.tag}`;
+    const n = kolonieIds(s).length;
+    this.kolWechsel.textContent = n > 1 ? `🏘️ ${n}` : '🏘️';
     this.tempoBtn.textContent = s.einstellungen.tempo === 2 ? '⏩' : '▶️';
     this.updateMission(d);
     this.updateSchule();
@@ -195,7 +222,9 @@ export class HUD {
   updateSchule() {
     const st = this.game.schulStatus?.();
     if (!st) return;
-    const txt = st.schulschluss ? `Schulschluss · ${Math.ceil(st.sekundenBisMorgen / 60)} min` : `${st.stunde + 1}. Std: ${st.fachIcon} ${st.fachName}`;
+    if (this.game.state.einstellungen.lernmodus === 'frei') st.schulschluss = false;
+    const txt = this.game.state.einstellungen.lernmodus === 'frei' ? '🎈 Freie Wahl'
+      : st.schulschluss ? `Schulschluss · ${Math.ceil(st.sekundenBisMorgen / 60)} min` : `${st.stunde + 1}. Std: ${st.fachIcon} ${st.fachName}`;
     if (this.quizInfo.textContent !== txt) this.quizInfo.textContent = txt;
     this.quizBtn.classList.toggle('pause', !!st.schulschluss);
   }

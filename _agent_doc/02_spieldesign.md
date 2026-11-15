@@ -184,3 +184,27 @@ Das Revier ist 64 × 44 Felder groß, mit Pollen-Quellen (beschleunigen die Brut
 
 ### Welt & Hochzeitsflug
 Dritte Ansicht: Übersichtskarte mit Heimatnest, Revier-Kreis und 9 Zielorten. Der Hochzeitsflug ist ein Ring-Flugspiel (Pseudo-3D). Erfolg gründet eine Tochterkolonie mit dauerhaftem Bonus und täglichen Grüßen; Misserfolg kostet nichts.
+
+## Version 4: Ameisen-Zivilisation
+
+### Lernmodi
+Beim Spielstart (und in den Einstellungen) wählbar: **Stundenplan** (wie bisher) oder **freie Wahl** (Fach → Thema → beliebiges offenes Test-Paket). In beiden Modi zeigt jede Karte vorab Bauplan oder Rohstoffe; die Bauplan-Verteilung (höchstens gut die Hälfte der Themen trägt einen Bauplan, schwierige Pakete tragen hohe Ausbaustufen) bleibt gleich.
+
+### Mehrere Kolonien
+- Architektur: Die angezeigte Kolonie liegt in den gewohnten Feldern des Spielstands (`world`, `rooms`, `volk`, `brut`, `revier`, Nahrung). Ruhende Kolonien liegen in `state.kolonienDaten` und werden einmal pro Spielsekunde mit derselben Simulation über ein Proxy-Objekt „leise" weitergerechnet (Ereignisse werden gesammelt). Gemeinsam: Sterne, Gangstücke, Baumaterial, Forschungspunkte, Joker, Baupläne, Forschung, Schule.
+- Jede Kolonie liegt in einer von 20 Gegenden (`biome.js`): Bodenfarben, Hügelmaterial, Bewuchs, Himmel, Hintergrund und Felsen-/Wassermenge im Untergrund.
+- Kein langes Warten: Startplatz-Bauplan von Anfang an, 3 Drohnen genügen anfangs, neue Kolonien starten mit fertigem Startnest und 14 Arbeiterinnen, Gründungsbonus (schnellere Eier, Brut und Baustellen in den ersten Tagen), Übungsflüge jederzeit.
+
+### Netz, Hotels, Bewusstsein
+- Straßen (3 Stufen) gleichen Nahrung zwischen Kolonien aus und bringen Handel (⭐/min); Botenlinien bringen Wissen (🔬, Quiz-Bonus).
+- Besuche reisen nur über Straßen und nur zu Kolonien mit Hotel (Plätze je Hotelstufe): Studentenaustausch (🔬), Nahrungstausch, Duftspur-Konferenz (Forschung schneller), Freundschaftsbesuch (⭐).
+- Kollektives Ameisen-Bewusstsein = Kolonien + Verbindungen + Hotels + Bauten + Baupläne + Begegnungen.
+
+### Krabbelschow-Skala (Ameisen-Kardaschow-Skala)
+Typ I Flügge Kolonie (bereit für den ersten Hochzeitsflug) · Typ II Ameisen-Nachbarschaft (3 Staaten, 1 Straße) · Typ III Duftnetz-Zivilisation (6 Staaten, 3 Botenlinien, 2 Hotels) · Typ IV Garten-Zivilisation (12 Staaten, alles verbunden, 5 Hotels, Bewusstsein 800) · Typ V Welt-Superorganismus (alle 20 Staaten, Grandhotel, Bewusstsein 2000). Der Wert hat Nachkommastellen (Fortschritt zur nächsten Stufe); jede Kolonie trägt sichtbar bei.
+
+### Holo-HUD
+Auf der Weltkarte zuschaltbar (🛰️ / Taste U) mit Aktivierungseffekt; Views: Zivilisationen, Netzwerk & Handel, Krabbelschow-Skala, Duftstoffe (Futter-, Alarm-, Bau-, Wissens-, Freuden-, Wegduft je Kolonie und Spuren entlang der Routen), Entwicklung (Bedarf je Kolonie und globale Ziele).
+
+### Flugspiele
+Ringflug leichter (größere Ringe auch bei weiten Zielen, großzügigere Trefferzone, Fehler kosten weniger Flugkraft; Wind bleibt). Neu: **Wespenalarm** – Wespen ausweichen, mit unendlich Nektar friedlich vertreiben, viele Power-up-Blumen mit Nektar-Waffen.

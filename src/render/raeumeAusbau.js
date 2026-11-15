@@ -1913,6 +1913,299 @@ Object.assign(AUSBAU_PROPS, {
   },
 });
 
+// ----- Gästehaus → Hotel → Grandhotel -----
+/** Koffer (Unterkante bei fy). */
+function koffer(ctx, x, fy, w, h, col = '#b5652e', aufkleber = true) {
+  strich(ctx, shade(col, -0.35), 1.1, x + w * 0.35, fy - h, x + w * 0.35, fy - h - 2.4, x + w * 0.65, fy - h - 2.4, x + w * 0.65, fy - h);
+  ctx.fillStyle = lin(ctx, x, 0, x + w, 0, shade(col, 0.2), col, shade(col, -0.25)); rr(ctx, x, fy - h, w, h, Math.min(2, h * 0.25)); ctx.fill();
+  ctx.fillStyle = 'rgba(60,30,10,.45)'; ctx.fillRect(x + w * 0.22, fy - h, 0.9, h); ctx.fillRect(x + w * 0.74, fy - h, 0.9, h);
+  ctx.fillStyle = '#e2b048'; ctx.fillRect(x + w * 0.45, fy - h * 0.62, w * 0.1 + 0.6, h * 0.16);
+  if (aufkleber && w > 7) { kreis(ctx, x + w * 0.35, fy - h * 0.35, Math.min(1.4, h * 0.14), '#ffd34d'); kreis(ctx, x + w * 0.6, fy - h * 0.28, Math.min(1.2, h * 0.12), '#5fc8ff'); }
+}
+/** Rezeptionsklingel auf einer Theke (y = Oberkante der Theke). */
+function klingel(ctx, x, y, s = 1) {
+  oval(ctx, x, y - 0.6 * s, 3.4 * s, 0.9 * s, '#5a3a20');
+  ctx.fillStyle = lin(ctx, x - 3 * s, 0, x + 3 * s, 0, '#fff2b0', '#e8b83a', '#a87818');
+  ctx.beginPath(); ctx.ellipse(x, y - 1.2 * s, 2.8 * s, 2.8 * s, 0, Math.PI, 0); ctx.fill();
+  kreis(ctx, x, y - 4.3 * s, 0.8 * s, '#d8a030');
+  kreis(ctx, x - 1 * s, y - 2.6 * s, 0.6 * s, 'rgba(255,255,255,.8)');
+}
+/** Schlüsselbrett mit Haken und bunten Anhängern (manche Schlüssel sind ausgegeben). */
+function schluesselbrett(ctx, x, y, w, h, gold = false, seed = 1) {
+  ctx.fillStyle = gold ? '#e2b048' : '#6b3f22'; rr(ctx, x - 1, y - 1, w + 2, h + 2, 1.5); ctx.fill();
+  ctx.fillStyle = gold ? '#5a1e2a' : '#a8743f'; ctx.fillRect(x, y, w, h);
+  const cols = Math.max(2, Math.floor(w / 5)), rows = Math.max(1, Math.floor((h - 1) / 7));
+  const farben = ['#e8463c', '#4f9bff', '#59c977', '#ffd34d', '#c48bff', '#ff9f43'];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    const kx = x + (c + 0.5) * (w / cols), ky = y + 2 + r * (h / rows);
+    kreis(ctx, kx, ky, 0.6, '#e2d6b8');
+    if ((c * 7 + r * 3 + seed) % 4 === 0) continue; // Schlüssel ist bei einem Gast
+    strich(ctx, gold ? '#ffe38a' : '#e2c27a', 0.7, kx, ky, kx, ky + 3.2);
+    ctx.fillStyle = farben[(c + r * 2 + seed) % farben.length]; rr(ctx, kx - 1.1, ky + 3, 2.2, 2.6, 0.6); ctx.fill();
+  }
+}
+/** Hotelbett mit Zimmernummer am Kopfteil. */
+function hotelbett(ctx, x, fy, w, decke, nr, gold = false) {
+  const kopf = gold ? '#e2b048' : '#8a5530';
+  ctx.fillStyle = kopf; rr(ctx, x, fy - 17, 4, 17, [2, 2, 0, 0]); ctx.fill();
+  ctx.fillStyle = shade(kopf, -0.2); ctx.fillRect(x + w - 2.5, fy - 9, 2.5, 9);
+  plank(ctx, x, fy - 6, w, 3, gold ? '#c8964a' : '#7a4d2a');
+  ctx.fillStyle = '#fbf6ec'; rr(ctx, x + 2, fy - 9, w - 3, 3.5, 1.5); ctx.fill();
+  ctx.fillStyle = decke; rr(ctx, x + 9, fy - 10, w - 10, 4.2, 1.5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(x + 9, fy - 10, w - 10, 0.8);
+  ctx.fillStyle = '#fff'; rr(ctx, x + 3.5, fy - 12, 6, 3.4, 1.6); ctx.fill();
+  if (nr) { ctx.fillStyle = gold ? '#5a1e2a' : '#fbf6ec'; rr(ctx, x - 0.5, fy - 21, 5, 4, 1); ctx.fill(); schrift(ctx, nr, x + 2, fy - 18, 3.2, gold ? '#ffe38a' : '#5a3a20'); }
+}
+/** Gepäckwagen (Messing) mit Koffern. */
+function gepaeckwagen(ctx, x, fy, s = 1) {
+  const w = 16 * s, h = 20 * s;
+  strich(ctx, '#e2b048', 1.2, x - w / 2, fy - 3, x - w / 2, fy - h, x + w / 2, fy - h, x + w / 2, fy - 3);
+  ctx.strokeStyle = '#e2b048'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.arc(x, fy - h, w / 2, Math.PI, 0); ctx.stroke();
+  plank(ctx, x - w / 2 - 1, fy - 4, w + 2, 2, '#c8964a');
+  koffer(ctx, x - w / 2 + 1, fy - 4, w * 0.62, 6 * s, '#3a6ad8');
+  koffer(ctx, x - w / 2 + 2, fy - 4 - 6 * s, w * 0.5, 5 * s, '#e8463c');
+  koffer(ctx, x + w * 0.1, fy - 4, w * 0.35, 9 * s, '#59a85a', false);
+  kreis(ctx, x - w / 2 + 1.5, fy - 1.3, 1.4, '#3a3a40'); kreis(ctx, x + w / 2 - 1.5, fy - 1.3, 1.4, '#3a3a40');
+}
+/** Leuchtschrift „HOTEL" (Kasten). */
+function hotelSchild(ctx, x, y, w, text = 'HOTEL', gold = false) {
+  const h = Math.max(8, w * 0.28);
+  ctx.fillStyle = gold ? '#e2b048' : '#5a1e1e'; rr(ctx, x - w / 2 - 1.5, y - 1.5, w + 3, h + 3, 2.5); ctx.fill();
+  ctx.fillStyle = gold ? '#3a0e18' : '#c42c3a'; rr(ctx, x - w / 2, y, w, h, 2); ctx.fill();
+  const size = Math.min(h * 0.72, (w - 3) / (text.length * 0.66));
+  schrift(ctx, text, x, y + h * 0.5 + size * 0.36, size, gold ? '#ffe38a' : '#fff4c8');
+  strich(ctx, 'rgba(60,40,20,.7)', 0.7, x - w * 0.3, y - 1.5, x - w * 0.3, y - 5); strich(ctx, 'rgba(60,40,20,.7)', 0.7, x + w * 0.3, y - 1.5, x + w * 0.3, y - 5);
+  return h;
+}
+/** Theke. */
+function theke(ctx, x, fy, w, h, front, top, gold) {
+  ctx.fillStyle = lin(ctx, x, 0, x + w, 0, shade(front, 0.12), front, shade(front, -0.25)); rr(ctx, x, fy - h, w, h, [1, 1, 0, 0]); ctx.fill();
+  if (gold) { ctx.fillStyle = '#e2b048'; ctx.fillRect(x, fy - h + 2.5, w, 0.9); ctx.fillRect(x, fy - 2.5, w, 0.9); }
+  else { ctx.fillStyle = 'rgba(0,0,0,.15)'; for (let k = x + 5; k < x + w - 2; k += 6) ctx.fillRect(k, fy - h + 3, 0.8, h - 4); }
+  plank(ctx, x - 2, fy - h - 2.4, w + 4, 2.8, top);
+}
+/** Lampen-x wie lampPositions in rooms.js (Deckenlampen nicht zustellen). */
+const lampenX = (rx, rw) => (rw > 110 ? [rx + rw * 0.28, rx + rw * 0.72] : [rx + rw * 0.5]);
+/** Kronleuchter-x im Grandhotel: Deckenlampen links der Bühne, sonst mittig über der Halle. */
+function kronleuchterX(rx, ry, rw, rh) {
+  const K = duftKarte(rx, ry, rw, rh), grenze = K.x - 22;
+  const xs = lampenX(rx, rw).filter(x => x < grenze);
+  return xs.length ? xs : [Math.min(grenze, (rx + 40 + grenze) / 2)];
+}
+/** Duftkarte für den Konferenzsaal: Kolonien und Duftspuren. */
+export function duftKarte(rx, ry, rw, rh) {
+  const fy = ry + rh - 13, R = rx + rw;
+  const sw = clamp(rw * 0.3, 28, 46), x = R - 10 - sw, h = clamp((fy - ry) * 0.42, 16, 30), y = fy - 12 - h;
+  return { x, y, w: sw, h, punkte: [[0.18, 0.3], [0.5, 0.72], [0.82, 0.32], [0.62, 0.22], [0.3, 0.8]].map(([a, b]) => [x + a * sw, y + b * h]) };
+}
+/** Rezeption: Theke links unter dem Schild, Klingel, Schlüsselbrett darüber (statisch & Animation). */
+function rezeption(rx, ry, rw, rh) {
+  const fy = ry + rh - 13, H = fy - ry;
+  const tx = rx + 9, tw = clamp(rw * 0.24, 22, 34), th = clamp(H * 0.3, 12, 18);
+  const kx = tx + tw - 17, kw = 16, ky = Math.max(ry + 24, fy - th - 22), kh = Math.min(15, fy - th - 4 - ky);
+  return { tx, tw, th, kx, kw, ky, kh, bx: tx + tw * 0.4, by: fy - th - 2.4 };
+}
+function hotelBasis(ctx, { rx, ry, rw, rh, fy }, stufe) {
+  const R = rx + rw, H = fy - ry;
+  const gold = stufe >= 3;
+  // Teppich
+  if (gold) { ctx.fillStyle = '#9e1a30'; ctx.fillRect(rx + 6, fy, rw - 12, 4); ctx.fillStyle = '#e2b048'; ctx.fillRect(rx + 6, fy + 0.6, rw - 12, 0.7); ctx.fillRect(rx + 6, fy + 3, rw - 12, 0.7); }
+  else oval(ctx, rx + rw * 0.52, fy + 1.5, rw * 0.2, 2.4, stufe === 2 ? '#3a6ab0' : '#c86a5a');
+  // Rezeption links (unter dem Schild)
+  const { tx, tw, th, kx, kw, ky, kh, bx, by } = rezeption(rx, ry, rw, rh);
+  if (stufe >= 2 && kh >= 6) schluesselbrett(ctx, kx, ky, kw, kh, gold, rw | 0);
+  theke(ctx, tx, fy, tw, th, gold ? '#f0ece4' : stufe === 2 ? '#a8403a' : '#a8743f', gold ? '#e2b048' : '#6b3f22', gold);
+  if (gold) {
+    for (let k = 0; k < 4; k++) strich(ctx, 'rgba(150,150,165,.45)', 0.6, tx + 3 + k * 7, fy - th + 5, tx + 7 + k * 6, fy - 4);
+    ctx.fillStyle = '#5a1e2a'; rr(ctx, tx + 2, fy - th * 0.62, tw - 4, Math.min(7, th * 0.36), 1.5); ctx.fill();
+    schrift(ctx, 'GRANDHOTEL', tx + tw / 2, fy - th * 0.62 + Math.min(7, th * 0.36) * 0.72, Math.min(4.2, (tw - 6) / 6.4), '#ffe38a');
+  }
+  klingel(ctx, bx, by, gold ? 1.15 : 1);
+  // Gästebuch
+  ctx.fillStyle = '#fbf6ec'; ctx.beginPath(); ctx.moveTo(tx + 3, fy - th - 2.4); ctx.lineTo(tx + 8, fy - th - 3.6); ctx.lineTo(tx + 13, fy - th - 2.4); ctx.fill();
+  strich(ctx, '#3a6ad8', 0.5, tx + 9.5, fy - th - 4, tx + 11, fy - th - 7);
+  return { tx, tw, th, R, H, gold };
+}
+Object.assign(AUSBAU_PROPS, {
+  gaestehaus(ctx, p) {
+    const { rx, ry, rw, fy } = p;
+    const { tx, tw, R, H } = hotelBasis(ctx, p, 1);
+    // Willkommens-Schild mit Wimpeln zwischen den Lampen
+    const lx = lampenX(rx, rw);
+    const wx = lx.length > 1 ? (lx[0] + lx[1]) / 2 : (lx[0] + R - 8) / 2 + 3, ww = clamp(lx.length > 1 ? lx[1] - lx[0] - 18 : R - 8 - lx[0] - 10, 22, 34);
+    strich(ctx, 'rgba(60,40,20,.7)', 0.6, wx - ww * 0.3, ry + 10, wx - ww * 0.3, ry + 13); strich(ctx, 'rgba(60,40,20,.7)', 0.6, wx + ww * 0.3, ry + 10, wx + ww * 0.3, ry + 13);
+    ctx.fillStyle = '#7a4d2a'; rr(ctx, wx - ww / 2 - 1, ry + 12, ww + 2, 9, 2.5); ctx.fill();
+    ctx.fillStyle = '#f4e2c0'; rr(ctx, wx - ww / 2, ry + 13, ww, 7, 2); ctx.fill();
+    schrift(ctx, 'Willkommen', wx, ry + 18.2, Math.min(4.6, (ww - 3) / 6), '#a8403a');
+    wimpel(ctx, wx - ww / 2 - 1, wx + ww / 2 + 1, ry + 22, 2.5, ['#ff7a9a', '#ffd34d', '#7ac8ff', '#9ad86a'], 2);
+    // Koffer neben der Theke
+    koffer(ctx, tx + tw + 3, fy, 9, 7, '#b5652e');
+    // Gästebetten
+    const x0 = tx + tw + 16, bw = 24;
+    const n = Math.max(1, Math.floor((R - 8 - x0) / (bw + 5)));
+    const decken = [['#ff9ab8'], ['#7ab8ff'], ['#9ad86a'], ['#ffc04d']];
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i * (bw + 5);
+      hotelbett(ctx, x, fy, bw, decken[i % 4][0], null);
+      // kleines Herz am Kopfteil
+      ctx.fillStyle = '#e8463c'; ctx.beginPath(); ctx.arc(x + 1.2, fy - 19, 1.3, 0, TAU); ctx.arc(x + 3, fy - 19, 1.3, 0, TAU); ctx.moveTo(x - 0.1, fy - 18.6); ctx.lineTo(x + 2.1, fy - 15.8); ctx.lineTo(x + 4.3, fy - 18.6); ctx.fill();
+    }
+    // Garderobe mit Hut und Bild
+    if (H > 34) {
+      const gx = R - 12;
+      strich(ctx, '#6b3f22', 1.2, gx, fy - 30, gx, fy - 36);
+      ctx.fillStyle = '#5a6ad8'; rr(ctx, gx - 4, fy - 36, 8, 3, 1); ctx.fill(); oval(ctx, gx, fy - 33, 6, 1.3, '#4a5ac8');
+    }
+    if (fy - ry > 44 && n > 1) bilderrahmen(ctx, x0 + bw + 2, ry + 26, 14, 9);
+    if (H > 60) {
+      // Regal mit Handtüchern und Teekanne
+      const sx0 = x0, sx1 = Math.min(R - 22, x0 + 60), sy = fy - 34;
+      plank(ctx, sx0, sy, sx1 - sx0, 2.6, '#7a4d2a');
+      const tuecher = ['#ff9ab8', '#7ab8ff', '#fff4dc', '#9ad86a'];
+      for (let k = 0; k < 4 && sx0 + 4 + k * 9 + 8 < sx1 - 12; k++) for (let j = 0; j < 2; j++) { ctx.fillStyle = tuecher[(k + j) % 4]; rr(ctx, sx0 + 3 + k * 9, sy - 3 - j * 3, 8, 3, 1.2); ctx.fill(); }
+      const kx2 = sx1 - 7;
+      oval(ctx, kx2, sy - 3.5, 4, 3.5, '#f4f0e8'); strich(ctx, '#f4f0e8', 1.2, kx2 + 3.5, sy - 4, kx2 + 6.5, sy - 6.5); kreis(ctx, kx2, sy - 7, 1, '#e8463c');
+    }
+  },
+  hotel(ctx, p) {
+    const { rx, ry, rw, fy } = p;
+    const { tx, tw, R, H } = hotelBasis(ctx, p, 2);
+    // Leuchtschrift HOTEL zwischen den Deckenlampen
+    const lx = lampenX(rx, rw);
+    const sx = lx.length > 1 ? (lx[0] + lx[1]) / 2 : (lx[0] + R - 6) / 2 + 2;
+    hotelSchild(ctx, sx, ry + 9, clamp(lx.length > 1 ? lx[1] - lx[0] - 16 : R - lx[0] - 14, 20, 36));
+    // Gepäckwagen
+    const gx = tx + tw + 12;
+    gepaeckwagen(ctx, gx, fy, H > 60 ? 1.2 : 1);
+    // Zimmer mit Nummern
+    const x0 = gx + 14, bw = 22;
+    const n = Math.max(1, Math.floor((R - 8 - x0) / (bw + 6)));
+    const reihen = H >= 70 ? 2 : 1;
+    const decken = ['#7ab8ff', '#ff9ab8', '#ffd34d', '#9ad86a'];
+    for (let r = 0; r < reihen; r++) {
+      const by = fy - r * 34;
+      if (r) plank(ctx, x0 - 3, by, R - 6 - x0, 3, '#6b3f22');
+      for (let i = 0; i < n; i++) {
+        const x = x0 + i * (bw + 6);
+        // Zimmerwand-Trenner
+        if (i) { ctx.fillStyle = 'rgba(60,30,15,.35)'; ctx.fillRect(x - 4, by - 26, 1.5, 26); }
+        hotelbett(ctx, x, by, bw, decken[(i + r * 2) % 4], String(r * n + i + 1));
+        kreis(ctx, x + bw - 3, by - 20, 1.6, '#ffe9a8');
+      }
+    }
+    // Pflanze
+    if (H > 40) pflanze(ctx, tx + tw + 3, fy, 0.75);
+  },
+  grandhotel(ctx, p) {
+    const { rx, ry, rw, rh, fy } = p;
+    const { tx, tw, R, H } = hotelBasis(ctx, p, 3);
+    // Konferenzsaal mit Bühne und Duftkarte
+    const K = duftKarte(rx, ry, rw, rh);
+    const bx0 = K.x - 8, stage = fy - 4;
+    // Kronleuchter (eigenes Licht) über der Halle, nicht über der Bühne
+    for (const x of kronleuchterX(rx, ry, rw, rh)) kronleuchter(ctx, x, ry + 8, rw > 130 ? 1.05 : 0.9);
+    // Fünf-Sterne-Plakette
+    const sx = (rx + 34 + bx0) / 2;
+    if (bx0 - rx > 70) {
+      const py = H > 60 ? ry + 48 : clamp(ry + 26, ry + 22, fy - 34);
+      ctx.fillStyle = '#e2b048'; rr(ctx, sx - 13, py, 26, 7, 3.5); ctx.fill();
+      ctx.fillStyle = '#3a0e18'; rr(ctx, sx - 12, py + 1, 24, 5, 2.5); ctx.fill();
+      for (let k = 0; k < 5; k++) stern(ctx, sx - 8 + k * 4, py + 3.5, 1.6, '#ffd34d');
+    }
+    ctx.fillStyle = '#6b2a1e'; ctx.fillRect(bx0, stage, R - 6 - bx0, 4);
+    ctx.fillStyle = '#e2b048'; ctx.fillRect(bx0, stage, R - 6 - bx0, 0.9);
+    // Vorhang-Schals
+    for (const [x, d] of [[bx0, 1], [R - 6, -1]]) {
+      ctx.fillStyle = '#b3203f'; ctx.beginPath(); ctx.moveTo(x, K.y - 8); ctx.lineTo(x + d * 9, K.y - 8); ctx.quadraticCurveTo(x + d * 3, K.y + K.h * 0.4, x + d * 4, stage); ctx.lineTo(x, stage); ctx.fill();
+      kreis(ctx, x + d * 3.5, K.y + K.h * 0.45, 1.3, '#e2b048');
+    }
+    ctx.fillStyle = '#b3203f'; ctx.beginPath(); ctx.moveTo(bx0, K.y - 9); for (let x = bx0; x <= R - 6; x += 6) ctx.quadraticCurveTo(x + 3, K.y - 4, Math.min(R - 6, x + 6), K.y - 9); ctx.lineTo(R - 6, K.y - 11); ctx.lineTo(bx0, K.y - 11); ctx.fill();
+    ctx.fillStyle = '#e2b048'; ctx.fillRect(bx0, K.y - 11.5, R - 6 - bx0, 1);
+    // Karte
+    ctx.fillStyle = '#e2b048'; rr(ctx, K.x - 1.5, K.y - 1.5, K.w + 3, K.h + 3, 1.5); ctx.fill();
+    ctx.fillStyle = '#f4e8c8'; ctx.fillRect(K.x, K.y, K.w, K.h);
+    oval(ctx, K.x + K.w * 0.3, K.y + K.h * 0.45, K.w * 0.22, K.h * 0.3, '#bfe0a0');
+    oval(ctx, K.x + K.w * 0.72, K.y + K.h * 0.6, K.w * 0.2, K.h * 0.26, '#cfe8a8');
+    oval(ctx, K.x + K.w * 0.55, K.y + K.h * 0.2, K.w * 0.12, K.h * 0.12, '#a8d8f0');
+    for (const [i, [x, y]] of K.punkte.entries()) { kreis(ctx, x, y, 1.6, ['#e8463c', '#4f9bff', '#59c977', '#ffd34d', '#c48bff'][i]); kreis(ctx, x, y, 0.6, '#fff'); }
+    schrift(ctx, 'DUFTKARTE', K.x + K.w / 2, K.y + K.h + 4.5, 3.2, '#ffe38a');
+    // Rednerpult
+    const px = K.x - 2;
+    ctx.fillStyle = '#8a5530'; ctx.beginPath(); ctx.moveTo(px - 4, stage - 10); ctx.lineTo(px + 4, stage - 10); ctx.lineTo(px + 3, stage); ctx.lineTo(px - 3, stage); ctx.fill();
+    ctx.fillStyle = '#e2b048'; ctx.fillRect(px - 4.5, stage - 11, 9, 1.4);
+    // Gepäckwagen und Palme
+    const gx = tx + tw + 12;
+    if (bx0 - gx > 22) gepaeckwagen(ctx, gx, fy, H > 60 ? 1.25 : 1.05);
+    const pm = (gx + bx0) / 2 + 6;
+    if (bx0 - gx > 40) {
+      ctx.fillStyle = '#e2b048'; ctx.beginPath(); ctx.moveTo(pm - 4, fy - 7); ctx.lineTo(pm + 4, fy - 7); ctx.lineTo(pm + 3, fy); ctx.lineTo(pm - 3, fy); ctx.fill();
+      strich(ctx, '#8a6a3a', 1.6, pm, fy - 7, pm + 1, fy - 22);
+      for (let k = 0; k < 6; k++) { const a = -Math.PI / 2 + (k - 2.5) * 0.55; ctx.strokeStyle = '#3f9a3a'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(pm + 1, fy - 22); ctx.quadraticCurveTo(pm + 1 + Math.cos(a) * 6, fy - 22 + Math.sin(a) * 6 - 2, pm + 1 + Math.cos(a) * 10, fy - 22 + Math.sin(a) * 7 + 4); ctx.stroke(); }
+    }
+    // hohe Halle: Porträt der Königin im Goldrahmen über der Plakette
+    if (H > 60 && bx0 - rx > 70) {
+      const bw = 18, bh = 16, by = ry + 26;
+      ctx.fillStyle = '#e2b048'; rr(ctx, sx - bw / 2 - 2.5, by - 2.5, bw + 5, bh + 5, 2); ctx.fill();
+      ctx.fillStyle = lin(ctx, 0, by, 0, by + bh, '#5a2a4a', '#2a1030'); ctx.fillRect(sx - bw / 2, by, bw, bh);
+      emoji(ctx, '👑', sx, by + bh * 0.42, 7); emoji(ctx, '🐜', sx, by + bh - 1.5, 8);
+    }
+  },
+});
+EIGENES_LICHT.add('grandhotel');
+
+/** Gast mit Koffer läuft herein (pro Bild). */
+function gast(ctx, x, fy, dir, t, col, acc) {
+  drawAntFast(ctx, { x, y: fy - 6.5, L: 11, dir, phase: t * 12, rolle: 'arbeiterin', acc });
+  koffer(ctx, x + dir * 6 - 3, fy - 0.5, 6, 5, col, false);
+}
+function hotelDynamic(ctx, room, rx, ry, rw, rh, t) {
+  const fy = ry + rh - 13, R = rx + rw, H = fy - ry;
+  const stufe = room.typ === 'grandhotel' ? 3 : room.typ === 'hotel' ? 2 : 1;
+  const { tx, tw, bx, by: kby } = rezeption(rx, ry, rw, rh);
+  // Klingel: „Ding!"
+  const kp = (t * 0.35 + room.id * 0.13) % 1;
+  if (kp < 0.18) {
+    const q = kp / 0.18, by = kby - 5;
+    ctx.strokeStyle = `rgba(255,230,140,${1 - q})`; ctx.lineWidth = 0.8;
+    for (const r of [3, 5.5]) { ctx.beginPath(); ctx.arc(bx, by + 2, r + q * 3, -Math.PI * 0.85, -Math.PI * 0.15); ctx.stroke(); }
+    if (q < 0.7) schrift(ctx, 'ding!', bx + 6, by - 2 - q * 4, 4, `rgba(255,240,180,${1 - q})`);
+  }
+  // Gast mit Koffer: kommt von rechts zur Rezeption
+  const per = 9, g = ((t + room.id * 1.7) % per) / per;
+  const ziel = tx + tw + 8, start = R - 6;
+  ctx.save(); ctx.beginPath(); ctx.rect(rx + 6, ry, rw - 12, rh); ctx.clip();
+  if (g < 0.55) gast(ctx, start - (start - ziel) * (g / 0.55), fy, -1, t, ['#3a6ad8', '#e8463c', '#59a85a'][room.id % 3], stufe >= 3 ? 'zylinder' : null);
+  else if (g < 0.75) { const a = g < 0.72 ? 1 : (0.75 - g) / 0.03; ctx.globalAlpha = a; drawAntFast(ctx, { x: ziel, y: fy - 6.5, L: 11, dir: -1, phase: 0, walking: false, acc: stufe >= 3 ? 'zylinder' : null }); koffer(ctx, ziel - 9, fy - 0.5, 6, 5, ['#3a6ad8', '#e8463c', '#59a85a'][room.id % 3], false); ctx.globalAlpha = 1; }
+  ctx.restore();
+  if (stufe === 2) {
+    // HOTEL-Leuchtschrift schimmert
+    const lx = lampenX(rx, rw);
+    const sx = lx.length > 1 ? (lx[0] + lx[1]) / 2 : (lx[0] + R - 6) / 2 + 2;
+    drawGlow(ctx, '255,120,90', sx, ry + 13, 16, 0.32 + Math.sin(t * 3) * 0.06);
+  }
+  if (stufe === 3) {
+    for (const x of kronleuchterX(rx, ry, rw, rh)) {
+      drawGlow(ctx, '255,220,150', x, ry + 14, 12, 0.5 + Math.sin(t * 2 + x) * 0.05);
+      funkeln(ctx, [[x - 6, ry + 17], [x + 6, ry + 17], [x, ry + 20]], t + x * 0.1, 1.2);
+    }
+    // Duftspuren wandern über die Karte
+    const K = duftKarte(rx, ry, rw, rh);
+    const P = K.punkte;
+    ctx.save(); ctx.lineWidth = 0.9; ctx.setLineDash([1.6, 1.6]);
+    for (const [i, [a, b]] of [[0, 1], [1, 2], [0, 3], [3, 2], [1, 4]].entries()) {
+      ctx.strokeStyle = ['#e8463c', '#4f9bff', '#59c977', '#ff9f43', '#c48bff'][i];
+      ctx.lineDashOffset = -t * 6 - i;
+      ctx.beginPath(); ctx.moveTo(P[a][0], P[a][1]); ctx.quadraticCurveTo((P[a][0] + P[b][0]) / 2, Math.min(P[a][1], P[b][1]) - 4, P[b][0], P[b][1]); ctx.stroke();
+    }
+    ctx.restore();
+    // Rednerin zeigt auf die Karte
+    const px = K.x - 2, stage = fy - 4;
+    drawAntFast(ctx, { x: px - 7, y: stage - 6.5, L: 10, dir: 1, phase: 0, walking: false, acc: 'schleife' });
+    const z = 0.2 + Math.sin(t * 1.5) * 0.25;
+    ctx.save(); ctx.translate(px - 3, stage - 10); ctx.rotate(-0.6 + z); strich(ctx, '#e2d6b8', 0.7, 0, 0, 12, 0); ctx.restore();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Oberfläche (Wiese): Signatur (ctx, p) mit p = { rx, ry, rw, rh, fy, cx, room } – fy = Boden
 // ---------------------------------------------------------------------------
@@ -2303,6 +2596,7 @@ export function ausbauDynamic(ctx, room, g, rx, ry, rw, rh, t) {
   const fy = sur ? ry + rh : ry + rh - 13;
   const cx = rx + rw / 2, R = rx + rw, H = fy - ry;
   switch (room.typ) {
+    case 'gaestehaus': case 'hotel': case 'grandhotel': hotelDynamic(ctx, room, rx, ry, rw, rh, t); break;
     case 'kronpalast': funkeln(ctx, [[cx - 6, ry + 21], [cx + 6, ry + 21], [cx, ry + 26], [rx + rw * 0.14, fy - 26]], t); break;
     case 'wohnhoehle': {
       for (let i = 0; i < 2; i++) {
