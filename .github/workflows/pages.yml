@@ -1,0 +1,54 @@
+# Veröffentlicht das Spiel bei jedem Push auf "main" auf GitHub Pages.
+# Einmalig nötig: Settings → Pages → Source: "GitHub Actions" (siehe README).
+name: GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: # erlaubt "Run workflow" per Knopfdruck im Actions-Tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Nur eine Veröffentlichung gleichzeitig; eine laufende wird nicht abgebrochen.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Tests (Fragenbanken, Simulation, Schule, Welt …)
+        run: npm test
+
+      - name: Spiel-Dateien zusammenstellen
+        # Kein Build-Schritt nötig – nur die Dateien, die der Browser braucht.
+        run: |
+          mkdir -p _site
+          cp -r index.html src styles _site/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Auf GitHub Pages veröffentlichen
+        id: deployment
+        uses: actions/deploy-pages@v4
